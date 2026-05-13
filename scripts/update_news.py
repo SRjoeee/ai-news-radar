@@ -201,6 +201,33 @@ ARXIV_CATEGORIES: tuple[dict[str, str], ...] = (
 
 ARXIV_MAX_AGE_DAYS = 7
 
+HF_DAILY_PAPERS_MAX_AGE_DAYS = 7
+
+HF_MLX_COMMUNITY_MAX_AGE_DAYS = 7
+HF_MLX_COMMUNITY_LIMIT = 50
+
+REDDIT_SUBREDDITS: tuple[str, ...] = (
+    "LocalLLaMA",
+    "MachineLearning",
+)
+REDDIT_KEYWORDS: tuple[str, ...] = (
+    "video editing", "video understanding", "video search", "video analysis",
+    "audio understanding", "audio analysis", "music generation", "music understanding",
+    "speech recognition", "whisper", "text to video", "video generation",
+    "video llm", "video agent", "auto editing", "video clipping",
+    "speaker diarization", "source separation", "beat tracking",
+    "video retrieval", "multimodal", "vision language model", "vlm",
+    "edge device", "edge inference", "on-device", "mlx",
+    "mcp server", "ai agent", "llm agent", "edit agent",
+)
+REDDIT_MAX_AGE_DAYS = 3
+
+HF_SPACES_TRENDING_LIMIT = 50
+HF_SPACES_MAX_AGE_DAYS = 7
+
+FINDIT_ORG = "Findit-AI"
+FINDIT_MAX_AGE_DAYS = 30
+
 # HN keyword filter for video/audio/agent AI topics
 HN_KEYWORDS: tuple[str, ...] = (
     "video editing", "video understanding", "video search", "video analysis",
@@ -842,344 +869,6 @@ def extract_next_data_payload(html: str) -> dict[str, Any] | None:
         return None
 
 
-def fetch_techurls(session: requests.Session, now: datetime) -> list[RawItem]:
-    site_id = "techurls"
-    site_name = "TechURLs"
-    r = session.get("https://techurls.com/", timeout=30)
-    r.raise_for_status()
-    soup = BeautifulSoup(r.text, "html.parser")
-
-    out: list[RawItem] = []
-    for block in soup.select("div.publisher-block"):
-        primary = (
-            block.select_one(".publisher-text .primary").get_text(strip=True)
-            if block.select_one(".publisher-text .primary")
-            else block.get("data-publisher", "unknown")
-        )
-        secondary = (
-            block.select_one(".publisher-text .secondary").get_text(strip=True)
-            if block.select_one(".publisher-text .secondary")
-            else ""
-        )
-        source = f"{primary} · {secondary}" if secondary and secondary != primary else primary
-
-        for link_row in block.select("div.publisher-link"):
-            a = link_row.select_one("a.article-link")
-            if not a or not a.get("href"):
-                continue
-            title = a.get_text(" ", strip=True)
-            url = a["href"].strip()
-
-            time_hint = ""
-            aside = link_row.select_one(".aside .text")
-            if aside:
-                time_hint = aside.get("title", "") or aside.get_text(" ", strip=True)
-
-            published = parse_date_any(time_hint, now)
-            out.append(
-                RawItem(
-                    site_id=site_id,
-                    site_name=site_name,
-                    source=source,
-                    title=title,
-                    url=url,
-                    published_at=published,
-                    meta={"time_hint": time_hint},
-                )
-            )
-
-    return out
-
-
-def fetch_buzzing(session: requests.Session, now: datetime) -> list[RawItem]:
-    site_id = "buzzing"
-    site_name = "Buzzing"
-    r = session.get("https://www.buzzing.cc/feed.json", timeout=30)
-    r.raise_for_status()
-    payload = r.json()
-    items = payload.get("items", [])
-
-    out: list[RawItem] = []
-    for it in items:
-        title = (it.get("title") or "").strip()
-        url = (it.get("url") or "").strip()
-        if not title or not url:
-            continue
-        source = first_non_empty(
-            it.get("source"),
-            it.get("site_name"),
-            it.get("channel"),
-            it.get("category"),
-            host_of_url(url),
-            site_name,
-        )
-        published = parse_date_any(it.get("date_published") or it.get("date_modified"), now)
-        out.append(
-            RawItem(
-                site_id=site_id,
-                site_name=site_name,
-                source=source,
-                title=title,
-                url=url,
-                published_at=published,
-                meta={"raw": {k: it.get(k) for k in ("source", "site_name", "channel", "category")}},
-            )
-        )
-    return out
-
-
-def fetch_iris(session: requests.Session, now: datetime) -> list[RawItem]:
-    site_id = "iris"
-    site_name = "Info Flow"
-
-    r = session.get("https://iris.findtruman.io/web/info_flow", timeout=30)
-    r.raise_for_status()
-    html = r.text
-
-    m = re.search(r"const\s+feeds\s*=\s*\[(.*?)\]\s*;", html, re.S)
-    if not m:
-        return []
-
-    section = m.group(1)
-    feeds = re.findall(
-        r"\{\s*name:\s*'([^']+)'\s*,\s*url:\s*'([^']+)'\s*\}",
-        section,
-        re.S,
-    )
-
-    out: list[RawItem] = []
-    for feed_name, feed_url in feeds:
-        try:
-            if feedparser is not None:
-                parsed = feedparser.parse(feed_url)
-                source_name = str(feed_name or getattr(parsed, "feed", {}).get("title") or "Iris Feed")
-                for entry in parsed.entries:
-                    title = str(entry.get("title", "")).strip()
-                    url = str(entry.get("link", "")).strip()
-                    if not title or not url:
-                        continue
-                    published = (
-                        parse_date_any(entry.get("published"), now)
-                        or parse_date_any(entry.get("updated"), now)
-                        or parse_date_any(entry.get("pubDate"), now)
-                    )
-                    out.append(
-                        RawItem(
-                            site_id=site_id,
-                            site_name=site_name,
-                            source=source_name,
-                            title=title,
-                            url=url,
-                            published_at=published,
-                            meta={"feed_url": feed_url},
-                        )
-                    )
-                continue
-
-            feed_resp = session.get(feed_url, timeout=30)
-            feed_resp.raise_for_status()
-            entries = parse_feed_entries_via_xml(feed_resp.content)
-            source_name = str(feed_name or "Iris Feed")
-            for entry in entries:
-                out.append(
-                    RawItem(
-                        site_id=site_id,
-                        site_name=site_name,
-                        source=source_name,
-                        title=entry["title"],
-                        url=entry["link"],
-                        published_at=parse_date_any(entry.get("published"), now),
-                        meta={"feed_url": feed_url},
-                    )
-                )
-        except Exception:
-            # Skip blocked/broken sub feeds and keep remaining feeds.
-            continue
-    return out
-
-
-def fetch_bestblogs(session: requests.Session, now: datetime) -> list[RawItem]:
-    site_id = "bestblogs"
-    site_name = "BestBlogs"
-
-    api = "https://api.bestblogs.dev/api/newsletter/list"
-    out: list[RawItem] = []
-    seen: set[str] = set()
-
-    try:
-        current_page = 1
-        page_count = 1
-
-        while current_page <= page_count and current_page <= 12:
-            payload = {
-                "currentPage": current_page,
-                "pageSize": 20,
-                "userLanguage": "en",
-            }
-            r = session.post(api, json=payload, timeout=30)
-            r.raise_for_status()
-            body = r.json()
-            data = body.get("data", {})
-            page_count = int(data.get("pageCount", 1) or 1)
-
-            for issue in data.get("dataList", []):
-                issue_id = str(issue.get("id", "")).strip()
-                title = str(issue.get("title", "")).strip()
-                if not issue_id or not title:
-                    continue
-                url = f"https://www.bestblogs.dev/en/newsletter#{issue_id}"
-                if url in seen:
-                    continue
-                seen.add(url)
-
-                published = parse_unix_timestamp(issue.get("createdTimestamp"))
-                out.append(
-                    RawItem(
-                        site_id=site_id,
-                        site_name=site_name,
-                        source="Weekly Newsletter",
-                        title=title,
-                        url=url,
-                        published_at=published,
-                        meta={
-                            "issue_id": issue_id,
-                            "article_count": issue.get("articleCount"),
-                        },
-                    )
-                )
-            current_page += 1
-    except Exception:
-        pass
-
-    if out:
-        return out
-
-    r = session.get("https://www.bestblogs.dev/en/newsletter", timeout=30)
-    r.raise_for_status()
-    soup = BeautifulSoup(r.text, "html.parser")
-
-    for a in soup.select("a[href*='/newsletter']"):
-        href = (a.get("href") or "").strip()
-        if not href:
-            continue
-        url = href if href.startswith("http") else urljoin("https://www.bestblogs.dev", href)
-        title = a.get_text(" ", strip=True)
-        if len(title) < 8:
-            continue
-        if url in seen:
-            continue
-        seen.add(url)
-        dt = None
-        time_tag = a.select_one("time")
-        if time_tag:
-            dt = parse_date_any(time_tag.get("datetime") or time_tag.get_text(" ", strip=True), now)
-        out.append(
-            RawItem(
-                site_id=site_id,
-                site_name=site_name,
-                source="Weekly Newsletter",
-                title=title,
-                url=url,
-                published_at=dt,
-                meta={},
-            )
-        )
-
-    return out
-
-
-def fetch_tophub(session: requests.Session, now: datetime) -> list[RawItem]:
-    site_id = "tophub"
-    site_name = "TopHub"
-
-    r = session.get("https://tophub.today/", timeout=30)
-    r.raise_for_status()
-    html = r.content.decode("utf-8", errors="replace")
-    if "�" in html:
-        for enc in ("gb18030", "utf-8"):
-            try:
-                candidate = r.content.decode(enc, errors="replace")
-                if candidate.count("�") < html.count("�"):
-                    html = candidate
-            except Exception:
-                continue
-    soup = BeautifulSoup(html, "html.parser")
-
-    out: list[RawItem] = []
-    for block in soup.select(".cc-cd"):
-        source_name_tag = block.select_one(".cc-cd-lb span")
-        board_tag = block.select_one(".cc-cd-sb-st")
-        source_name = source_name_tag.get_text(" ", strip=True) if source_name_tag else "TopHub"
-        board_name = board_tag.get_text(" ", strip=True) if board_tag else ""
-        source_name = maybe_fix_mojibake(source_name)
-        board_name = maybe_fix_mojibake(board_name)
-        source = f"{source_name} · {board_name}" if board_name else source_name
-
-        for a in block.select(".cc-cd-cb-l a"):
-            href = a.get("href", "").strip()
-            row = a.select_one(".cc-cd-cb-ll")
-            title_tag = row.select_one(".t") if row else None
-            metric_tag = row.select_one(".e") if row else None
-
-            title = (
-                title_tag.get_text(" ", strip=True)
-                if title_tag
-                else a.get_text(" ", strip=True)
-            )
-            title = maybe_fix_mojibake(title)
-            if not title or not href:
-                continue
-
-            full_url = href if href.startswith("http") else urljoin("https://tophub.today", href)
-            row_text = row.get_text(" ", strip=True) if row else title
-            published = parse_relative_time_zh(row_text, now)
-
-            out.append(
-                RawItem(
-                    site_id=site_id,
-                    site_name=site_name,
-                    source=source,
-                    title=title,
-                    url=full_url,
-                    published_at=published,
-                    meta={"metric": metric_tag.get_text(" ", strip=True) if metric_tag else ""},
-                )
-            )
-
-    return out
-
-
-def fetch_zeli(session: requests.Session, now: datetime) -> list[RawItem]:
-    site_id = "zeli"
-    site_name = "Zeli"
-    out: list[RawItem] = []
-
-    url = "https://zeli.app/api/hacker-news?type=hot24h"
-    r = session.get(url, timeout=30)
-    r.raise_for_status()
-    body = r.json()
-    posts = body.get("posts", [])
-    for p in posts:
-        title = str(p.get("title", "")).strip()
-        link = str(p.get("url", "")).strip()
-        if not title or not link:
-            continue
-        published = parse_unix_timestamp(p.get("time")) or now
-        out.append(
-            RawItem(
-                site_id=site_id,
-                site_name=site_name,
-                source="Hacker News · 24h最热",
-                title=title,
-                url=link,
-                published_at=published,
-                meta={"hn_id": p.get("id")},
-            )
-        )
-
-    return out
-
-
 def parse_anthropic_news_items(page_html: str, now: datetime) -> list[RawItem]:
     site_id = "official_ai"
     site_name = "Official AI Updates"
@@ -1777,159 +1466,6 @@ def fetch_aihot(session: requests.Session, now: datetime) -> list[RawItem]:
     return []
 
 
-def extract_newsnow_source_ids(js: str) -> list[str]:
-    marker = "{v2ex:vL"
-    start = js.find(marker)
-    if start == -1:
-        return ["hackernews", "producthunt", "github", "sspai", "juejin", "36kr"]
-
-    # Locate beginning "{" and parse until matching "}"
-    block_start = start
-    depth = 0
-    end = None
-    in_str = False
-    esc = False
-
-    for i, ch in enumerate(js[block_start:], block_start):
-        if in_str:
-            if esc:
-                esc = False
-            elif ch == "\\":
-                esc = True
-            elif ch == '"':
-                in_str = False
-            continue
-
-        if ch == '"':
-            in_str = True
-            continue
-
-        if ch == "{":
-            depth += 1
-        elif ch == "}":
-            depth -= 1
-            if depth == 0:
-                end = i + 1
-                break
-
-    if end is None:
-        return ["hackernews", "producthunt", "github", "sspai", "juejin", "36kr"]
-
-    obj = js[block_start:end]
-    all_keys = [m.group(2) for m in re.finditer(r'(["\']?)([a-zA-Z0-9_-]+)\1\s*:', obj)]
-
-    ignore = {
-        "name",
-        "column",
-        "home",
-        "https",
-        "color",
-        "interval",
-        "title",
-        "type",
-        "redirect",
-        "desc",
-    }
-
-    source_ids: list[str] = []
-    for key in all_keys:
-        if key in ignore:
-            continue
-        if key not in source_ids:
-            source_ids.append(key)
-
-    # API currently returns around 57 source ids successfully.
-    return source_ids
-
-
-def fetch_newsnow(session: requests.Session, now: datetime) -> list[RawItem]:
-    site_id = "newsnow"
-    site_name = "NewsNow"
-
-    home = session.get("https://newsnow.busiyi.world/", timeout=30)
-    home.raise_for_status()
-    soup = BeautifulSoup(home.text, "html.parser")
-
-    bundle = None
-    for script in soup.select("script[src]"):
-        src = script.get("src", "")
-        if "/assets/index-" in src and src.endswith(".js"):
-            bundle = urljoin("https://newsnow.busiyi.world/", src)
-            break
-
-    source_ids = ["hackernews", "producthunt", "github", "sspai", "juejin", "36kr"]
-    if bundle:
-        js = session.get(bundle, timeout=30).text
-        source_ids = extract_newsnow_source_ids(js)
-
-    headers = {
-        "User-Agent": BROWSER_UA,
-        "Accept": "application/json, text/plain, */*",
-        "Content-Type": "application/json",
-        "Origin": "https://newsnow.busiyi.world",
-        "Referer": "https://newsnow.busiyi.world/",
-    }
-
-    response = session.post(
-        "https://newsnow.busiyi.world/api/s/entire",
-        json={"sources": source_ids},
-        headers=headers,
-        timeout=45,
-    )
-
-    if response.status_code != 200:
-        # fallback to per-source API
-        source_blocks = []
-        for sid in source_ids:
-            rr = session.get(f"https://newsnow.busiyi.world/api/s?id={sid}", headers=headers, timeout=20)
-            if rr.status_code == 200:
-                try:
-                    source_blocks.append(rr.json())
-                except Exception:
-                    pass
-    else:
-        body = response.json()
-        source_blocks = body.get("data") if isinstance(body, dict) else body
-    if not isinstance(source_blocks, list):
-        source_blocks = []
-
-    out: list[RawItem] = []
-    for block in source_blocks:
-        sid = str(block.get("id") or "unknown")
-        source_title = first_non_empty(block.get("title"), block.get("name"), block.get("desc"), sid)
-        source_label = f"{source_title} ({sid})" if source_title != sid else sid
-        updated = parse_unix_timestamp(block.get("updatedTime")) or now
-        items = block.get("items") or []
-        for it in items:
-            title = str(it.get("title") or "").strip()
-            url = str(it.get("url") or "").strip()
-            if not title or not url:
-                continue
-
-            published = None
-            published = published or parse_date_any(it.get("pubDate"), now)
-            if not published:
-                extra = it.get("extra") or {}
-                if isinstance(extra, dict):
-                    published = parse_date_any(extra.get("date"), now)
-            if not published:
-                published = updated
-
-            out.append(
-                RawItem(
-                    site_id=site_id,
-                    site_name=site_name,
-                    source=source_label,
-                    title=title,
-                    url=url,
-                    published_at=published,
-                    meta={},
-                )
-            )
-
-    return out
-
-
 # ---------------------------------------------------------------------------
 # GitHub Topics Radar fetchers
 # ---------------------------------------------------------------------------
@@ -2054,6 +1590,310 @@ def fetch_github_releases(session: requests.Session, now: datetime) -> list[RawI
     return out
 
 
+def fetch_hf_daily_papers(session: requests.Session, now: datetime) -> list[RawItem]:
+    """Fetch daily papers from Hugging Face with AI summaries and upvotes."""
+    site_id = "hf_papers"
+    site_name = "HF Daily Papers"
+    out: list[RawItem] = []
+    cutoff = now - timedelta(days=HF_DAILY_PAPERS_MAX_AGE_DAYS)
+
+    resp = session.get("https://huggingface.co/api/daily_papers", timeout=30)
+    resp.raise_for_status()
+    papers = resp.json()
+
+    for item in papers:
+        paper = item.get("paper") or item
+        paper_id = paper.get("id", "")
+        title = (paper.get("title") or "").strip()
+        if not title or not paper_id:
+            continue
+
+        published = parse_date_any(paper.get("publishedAt") or paper.get("submittedOnDailyAt"), now)
+        if not published:
+            continue
+        if published < cutoff:
+            continue
+
+        arxiv_url = f"https://arxiv.org/abs/{paper_id}"
+        upvotes = paper.get("upvotes", 0)
+        authors = [a.get("name", "") for a in (paper.get("authors") or [])[:3]]
+        gh_repo = paper.get("githubRepo") or ""
+
+        meta: dict[str, Any] = {"paper_id": paper_id, "upvotes": upvotes}
+        if authors:
+            meta["authors"] = authors
+        if gh_repo:
+            meta["github_repo"] = gh_repo
+
+        out.append(RawItem(
+            site_id=site_id,
+            site_name=site_name,
+            source="Hugging Face",
+            title=title,
+            url=arxiv_url,
+            published_at=published,
+            meta=meta,
+        ))
+
+    return out
+
+
+def fetch_hf_mlx_community(session: requests.Session, now: datetime) -> list[RawItem]:
+    """Fetch latest models from mlx-community on Hugging Face (edge-device inference)."""
+    site_id = "hf_mlx"
+    site_name = "mlx-community"
+    out: list[RawItem] = []
+    cutoff = now - timedelta(days=HF_MLX_COMMUNITY_MAX_AGE_DAYS)
+
+    url = (
+        "https://huggingface.co/api/models"
+        "?author=mlx-community&sort=lastModified&direction=-1"
+        f"&limit={HF_MLX_COMMUNITY_LIMIT}"
+    )
+    resp = session.get(url, timeout=30)
+    resp.raise_for_status()
+    models = resp.json()
+
+    for m in models:
+        model_id = m.get("id") or m.get("modelId", "")
+        if not model_id:
+            continue
+
+        last_modified = parse_date_any(m.get("lastModified") or m.get("lastModifiedAt"), now)
+        if not last_modified:
+            continue
+        if last_modified < cutoff:
+            continue
+
+        tags = m.get("tags") or []
+        pipeline_tag = m.get("pipeline_tag") or ""
+        likes = m.get("likes", 0)
+        downloads = m.get("downloads", 0)
+
+        # Build a descriptive title
+        short_name = model_id.split("/")[-1] if "/" in model_id else model_id
+        title = short_name
+        if pipeline_tag:
+            title = f"{short_name} — {pipeline_tag}"
+
+        hf_url = f"https://huggingface.co/{model_id}"
+
+        meta: dict[str, Any] = {
+            "model_id": model_id,
+            "likes": likes,
+            "downloads": downloads,
+        }
+        if tags:
+            meta["tags"] = tags[:8]
+        if pipeline_tag:
+            meta["pipeline_tag"] = pipeline_tag
+
+        out.append(RawItem(
+            site_id=site_id,
+            site_name=site_name,
+            source="Hugging Face · MLX",
+            title=title,
+            url=hf_url,
+            published_at=last_modified,
+            meta=meta,
+        ))
+
+    return out
+
+
+def fetch_reddit_ai(session: requests.Session, now: datetime) -> list[RawItem]:
+    """Fetch topic-filtered posts from AI/ML subreddits."""
+    site_id = "reddit_ai"
+    site_name = "Reddit · AI"
+    out: list[RawItem] = []
+    cutoff = now - timedelta(days=REDDIT_MAX_AGE_DAYS)
+    seen_urls: set[str] = set()
+
+    headers = {"User-Agent": "ai-news-radar/1.0 (by /u/ai_news_radar)"}
+
+    for subreddit in REDDIT_SUBREDDITS:
+        # Fetch newest posts and filter client-side (more reliable than search API)
+        url = f"https://www.reddit.com/r/{subreddit}/new.json?limit=100"
+        try:
+            resp = session.get(url, timeout=30, headers=headers)
+            if resp.status_code == 429:
+                continue
+            resp.raise_for_status()
+            data = resp.json()
+        except Exception:
+            continue
+
+        children = (data.get("data") or {}).get("children") or []
+        for child in children:
+            post = child.get("data") or {}
+            title = (post.get("title") or "").strip()
+            selftext = (post.get("selftext") or "").strip()[:500]
+            permalink = (post.get("permalink") or "").strip()
+            if not title or not permalink:
+                continue
+
+            # Check if any keyword appears in title or selftext (case-insensitive)
+            hay = f"{title} {selftext}".lower()
+            if not any(kw in hay for kw in REDDIT_KEYWORDS):
+                continue
+
+            full_url = f"https://www.reddit.com{permalink}"
+            if full_url in seen_urls:
+                continue
+            seen_urls.add(full_url)
+
+            created = parse_unix_timestamp(post.get("created_utc"))
+            if not created:
+                continue
+            if created < cutoff:
+                continue
+
+            score = post.get("score", 0)
+            comments = post.get("num_comments", 0)
+
+            out.append(RawItem(
+                site_id=site_id,
+                site_name=site_name,
+                source=f"r/{subreddit}",
+                title=title,
+                url=full_url,
+                published_at=created,
+                meta={"score": score, "comments": comments, "subreddit": subreddit},
+            ))
+
+    return out
+
+
+def fetch_hf_spaces_trending(session: requests.Session, now: datetime) -> list[RawItem]:
+    """Fetch trending Hugging Face Spaces (demos and apps)."""
+    site_id = "hf_spaces"
+    site_name = "HF Spaces"
+    out: list[RawItem] = []
+    cutoff = now - timedelta(days=HF_SPACES_MAX_AGE_DAYS)
+
+    url = (
+        "https://huggingface.co/api/spaces"
+        f"?sort=lastModified&direction=-1&limit={HF_SPACES_TRENDING_LIMIT}"
+    )
+    resp = session.get(url, timeout=30)
+    resp.raise_for_status()
+    spaces = resp.json()
+
+    for s in spaces:
+        space_id = s.get("id") or ""
+        if not space_id:
+            continue
+
+        last_modified = parse_date_any(s.get("lastModified") or s.get("lastModifiedAt"), now)
+        if not last_modified:
+            continue
+        if last_modified < cutoff:
+            continue
+
+        tags = s.get("tags") or []
+        sdk = s.get("sdk") or ""
+        likes = s.get("likes", 0)
+
+        short_name = space_id.split("/")[-1] if "/" in space_id else space_id
+        title = short_name
+        if sdk:
+            title = f"{short_name} [{sdk}]"
+
+        space_url = f"https://huggingface.co/spaces/{space_id}"
+
+        meta: dict[str, Any] = {
+            "space_id": space_id,
+            "likes": likes,
+        }
+        if sdk:
+            meta["sdk"] = sdk
+        if tags:
+            meta["tags"] = tags[:8]
+
+        out.append(RawItem(
+            site_id=site_id,
+            site_name=site_name,
+            source="Hugging Face · Spaces",
+            title=title,
+            url=space_url,
+            published_at=last_modified,
+            meta=meta,
+        ))
+
+    return out
+
+
+def fetch_findit_releases(session: requests.Session, now: datetime) -> list[RawItem]:
+    """Fetch releases from Findit-AI org repos (FinDIT research projects)."""
+    site_id = "findit"
+    site_name = "Findit-AI"
+    out: list[RawItem] = []
+    cutoff = now - timedelta(days=FINDIT_MAX_AGE_DAYS)
+
+    # List repos in the org
+    repos_url = f"https://api.github.com/orgs/{FINDIT_ORG}/repos?per_page=100&sort=pushed"
+    gh_headers = {"Accept": "application/vnd.github+json"}
+    token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
+    if token:
+        gh_headers["Authorization"] = f"Bearer {token}"
+
+    try:
+        repos_resp = session.get(repos_url, timeout=30, headers=gh_headers)
+        repos_resp.raise_for_status()
+        repos = repos_resp.json()
+    except Exception:
+        return out
+
+    def fetch_repo_releases(repo: dict[str, Any]) -> list[RawItem]:
+        items: list[RawItem] = []
+        repo_name = repo.get("name", "")
+        full_name = repo.get("full_name", "")
+        if not full_name:
+            return items
+
+        releases_url = f"https://api.github.com/repos/{full_name}/releases?per_page=5"
+        try:
+            rel_resp = session.get(releases_url, timeout=20, headers=gh_headers)
+            if rel_resp.status_code != 200:
+                return items
+            releases = rel_resp.json()
+        except Exception:
+            return items
+
+        for rel in releases:
+            tag = rel.get("tag_name") or ""
+            name = rel.get("name") or tag
+            published = parse_date_any(rel.get("published_at"), now)
+            if not published or published < cutoff:
+                continue
+            if rel.get("draft"):
+                continue
+
+            html_url = rel.get("html_url") or f"https://github.com/{full_name}/releases"
+            title = f"{repo_name} {name}" if name else repo_name
+
+            items.append(RawItem(
+                site_id="findit",
+                site_name="Findit-AI",
+                source=repo_name,
+                title=title,
+                url=html_url,
+                published_at=published,
+                meta={"repo": full_name, "tag": tag},
+            ))
+        return items
+
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        futures = [pool.submit(fetch_repo_releases, r) for r in repos]
+        for fut in futures:
+            try:
+                out.extend(fut.result())
+            except Exception:
+                continue
+
+    return out
+
+
 def fetch_arxiv_feeds(session: requests.Session, now: datetime) -> list[RawItem]:
     """Fetch recent papers from arXiv category feeds (cs.CV, cs.MM, cs.SD, eess.AS)."""
     site_id = "arxiv"
@@ -2155,16 +1995,14 @@ def collect_all(session: requests.Session, now: datetime) -> tuple[list[RawItem]
         ("official_ai", "Official AI Updates", fetch_official_ai_updates),
         ("aibreakfast", "AI Breakfast", fetch_ai_breakfast),
         ("followbuilders", "Follow Builders", fetch_follow_builders),
-        ("techurls", "TechURLs", fetch_techurls),
-        ("buzzing", "Buzzing", fetch_buzzing),
-        ("iris", "Info Flow", fetch_iris),
-        ("bestblogs", "BestBlogs", fetch_bestblogs),
-        ("tophub", "TopHub", fetch_tophub),
-        ("zeli", "Zeli", fetch_zeli),
         ("aihubtoday", "AI HubToday", fetch_ai_hubtoday),
         ("aibase", "AIbase", fetch_aibase),
         ("aihot", "AI HOT", fetch_aihot),
-        ("newsnow", "NewsNow", fetch_newsnow),
+        ("hf_papers", "HF Daily Papers", fetch_hf_daily_papers),
+        ("hf_mlx", "mlx-community", fetch_hf_mlx_community),
+        ("reddit_ai", "Reddit · AI", fetch_reddit_ai),
+        ("hf_spaces", "HF Spaces Trending", fetch_hf_spaces_trending),
+        ("findit", "Findit-AI", fetch_findit_releases),
         ("github_topics", "GitHub Topics", fetch_github_topics),
         ("github_releases", "GitHub Releases", fetch_github_releases),
         ("arxiv", "arXiv", fetch_arxiv_feeds),
