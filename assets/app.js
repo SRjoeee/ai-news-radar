@@ -117,16 +117,17 @@ function siteRow(siteId) {
 
 function renderCoverageCard(label, value, meta, tone = "") {
   const node = document.createElement("div");
-  node.className = `coverage-card ${tone}`.trim();
-  const labelEl = document.createElement("span");
-  labelEl.className = "coverage-label";
-  labelEl.textContent = label;
-  const valueEl = document.createElement("strong");
-  valueEl.textContent = value;
-  const metaEl = document.createElement("span");
-  metaEl.className = "coverage-meta";
-  metaEl.textContent = meta;
-  node.append(labelEl, valueEl, metaEl);
+  node.className = "coverage-chip";
+  const dotEl = document.createElement("span");
+  dotEl.className = `coverage-dot ${tone === "warn" ? "warn" : tone === "ok" ? "ok" : "ok"}`.trim();
+  const nameEl = document.createElement("span");
+  nameEl.className = "coverage-name";
+  nameEl.textContent = label;
+  const countEl = document.createElement("span");
+  countEl.className = "coverage-count";
+  countEl.textContent = value;
+  node.append(dotEl, nameEl, countEl);
+  node.title = meta;
   return node;
 }
 

@@ -29,30 +29,26 @@
   <body>
     <main class="shell">
       <header class="hero">
-        <div class="hero-main">
-          <div class="hero-headline">
-            <img class="hero-logo" src="./assets/logo.svg" alt="AI News Radar Logo" />
-            <div>
-              <p class="hero-tag">AI NEWS RADAR</p>
-              <h1>24 小时 AI 更新雷达</h1>
-            </div>
+        <div class="hero-headline">
+          <img class="hero-logo" src="./assets/logo.svg" alt="AI News Radar Logo" />
+          <div>
+            <p class="hero-tag">AI NEWS RADAR</p>
+            <h1>24 小时 AI 更新雷达</h1>
           </div>
-          <p class="hero-sub">
-            过去 24 小时值得看的 AI/科技更新，附 WaytoAGI 近 7 日变化。
-          </p>
         </div>
-        <div class="hero-meta">
+        <p class="hero-sub">
+          过去 24 小时值得看的 AI/科技更新，附 WaytoAGI 近 7 日变化。
+        </p>
+        <div class="hero-meta-row">
           <span class="updated-label">更新时间</span>
           <span class="updated" id="updatedAt">加载中...</span>
         </div>
-
         <section class="stats" id="stats"></section>
-
         <section class="coverage-strip" id="coverageStrip" aria-label="Source coverage status"></section>
       </header>
 
       <section class="primary-controls">
-        <input id="searchInput" type="search" placeholder="搜索 AI 信号 / 来源" />
+        <input id="searchInput" type="search" placeholder="搜索 AI 信号 / 来源" aria-label="搜索" />
         <div class="mode-hint" id="modeHint">AI强相关</div>
       </section>
 
@@ -65,15 +61,15 @@
           <div class="advanced-controls">
             <label class="field">
               <span>站点</span>
-              <select id="siteSelect">
+              <select id="siteSelect" aria-label="选择站点">
                 <option value="">全部站点</option>
               </select>
             </label>
             <div class="field">
               <span>视图</span>
-              <div class="mode-switch">
-                <button id="modeAiBtn" class="mode-btn active" type="button">AI强相关</button>
-                <button id="modeAllBtn" class="mode-btn" type="button">全量</button>
+              <div class="mode-switch" role="tablist">
+                <button id="modeAiBtn" class="mode-btn active" type="button" role="tab" aria-selected="true">AI强相关</button>
+                <button id="modeAllBtn" class="mode-btn" type="button" role="tab" aria-selected="false">全量</button>
               </div>
             </div>
             <label id="allDedupeWrap" class="all-dedupe" for="allDedupeToggle">
@@ -91,9 +87,9 @@
         <div class="waytoagi-head">
           <h2>WaytoAGI 更新日志</h2>
           <div class="waytoagi-tools">
-            <div class="waytoagi-switch">
-              <button id="waytoagiTodayBtn" class="waytoagi-btn active" type="button">最近更新日</button>
-              <button id="waytoagi7dBtn" class="waytoagi-btn" type="button">近7日</button>
+            <div class="waytoagi-switch" role="tablist">
+              <button id="waytoagiTodayBtn" class="waytoagi-btn active" type="button" role="tab" aria-selected="true">最近更新日</button>
+              <button id="waytoagi7dBtn" class="waytoagi-btn" type="button" role="tab" aria-selected="false">近7日</button>
             </div>
             <span id="waytoagiUpdatedAt">加载中...</span>
           </div>
