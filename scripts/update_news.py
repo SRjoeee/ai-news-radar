@@ -132,6 +132,88 @@ X_API_DEFAULT_QUERY = '(AI OR "artificial intelligence" OR "large language model
 X_API_DEFAULT_MAX_RESULTS = 20
 X_API_MAX_QUERY_CHARS = 512
 
+# --- GitHub Topics Radar (video/audio/music/agent AI) ---
+GITHUB_TOPICS: tuple[str, ...] = (
+    # Video Search & Retrieval
+    "video-search", "semantic-video-search", "video-retrieval", "cross-modal-retrieval",
+    # Video Understanding & Analysis
+    "video-understanding", "video-analysis", "video-processing", "scene-detection",
+    "shot-detection", "keyframe-detection", "video-captioning", "video-llm",
+    "vision-language-model", "mllm",
+    # Video Editing / Auto-editing / Editor UI
+    "video-editing", "video-editor", "web-video-editor", "ai-video-editor",
+    "automatic-video-editing", "automatic-editing", "video-automation",
+    "text-based-video-editing", "transcript-editing", "video-clipping",
+    "shorts-editor", "vertical-video", "auto-highlight",
+    # Video Agent / Agentic
+    "ai-agents", "llm-agents", "mcp", "model-context-protocol",
+    # Audio Understanding
+    "audio-understanding", "audio-analysis", "audio-feature-extraction",
+    "speaker-diarization", "speech-to-text", "whisper", "whisperx",
+    "audio-event-detection", "sound-event-detection",
+    # Music Understanding & Analysis
+    "music-information-retrieval", "music-understanding", "music-analysis",
+    "beat-tracking", "onset-detection", "music-transcription",
+    "drum-transcription", "source-separation", "vocal-separation",
+    "chord-detection", "audio-fingerprinting", "music-similarity", "ismir",
+)
+
+GITHUB_TOPICS_MAX_AGE_DAYS = 7
+
+# Core repos to track releases
+GITHUB_CORE_REPOS: tuple[dict[str, str], ...] = (
+    {"owner": "openai", "repo": "whisper", "name": "OpenAI Whisper"},
+    {"owner": "FFmpeg", "repo": "FFmpeg", "name": "FFmpeg"},
+    {"owner": "Zulko", "repo": "moviepy", "name": "MoviePy"},
+    {"owner": "PixarAnimationStudios", "repo": "OpenTimelineIO", "name": "OpenTimelineIO"},
+    {"owner": "remotion-dev", "repo": "remotion", "name": "Remotion"},
+    {"owner": "m-bain", "repo": "whisperX", "name": "WhisperX"},
+    {"owner": "jianfch", "repo": "stable-ts", "name": "stable-ts"},
+    {"owner": "pyannote", "repo": "pyannote-audio", "name": "pyannote-audio"},
+    {"owner": "librosa", "repo": "librosa", "name": "librosa"},
+    {"owner": "opencv", "repo": "opencv", "name": "OpenCV"},
+    {"owner": "scikit-video", "repo": "scikit-video", "name": "scikit-video"},
+    {"owner": "facebookresearch", "repo": "demucs", "name": "Demucs"},
+    {"owner": "haoheliu", "repo": "audiooldier", "name": "AudioLDM"},
+    {"owner": "MCG-NJU", "repo": "VideoBERT", "name": "VideoBERT"},
+    {"owner": "facebookresearch", "repo": "ImageBind", "name": "ImageBind"},
+    {"owner": "lucidrains", "repo": "x-transformers", "name": "x-transformers"},
+    {"owner": "huggingface", "repo": "transformers", "name": "HuggingFace Transformers"},
+    {"owner": "PKU-YuanGroup", "repo": "Video-LLaVA", "name": "Video-LLaVA"},
+    {"owner": "OpenGVLab", "repo": "InternVideo", "name": "InternVideo"},
+    {"owner": "showlab", "repo": "VideoChat", "name": "VideoChat"},
+    {"owner": "auto-editor", "repo": "auto-editor", "name": "auto-editor"},
+    {"owner": "yt-dlp", "repo": "yt-dlp", "name": "yt-dlp"},
+    {"owner": "StreamBLEND", "repo": "StreamBLEND", "name": "StreamBLEND"},
+    {"owner": "jianchang512", "repo": "pyvideotrans", "name": "pyvideotrans"},
+    {"owner": "xinntao", "repo": "Real-ESRGAN", "name": "Real-ESRGAN"},
+)
+
+GITHUB_RELEASES_MAX_AGE_DAYS = 30
+
+# arXiv categories for video/audio/music AI
+ARXIV_CATEGORIES: tuple[dict[str, str], ...] = (
+    {"id": "cs.CV", "name": "Computer Vision", "url": "https://rss.arxiv.org/rss/cs.CV"},
+    {"id": "cs.MM", "name": "Multimedia", "url": "https://rss.arxiv.org/rss/cs.MM"},
+    {"id": "cs.SD", "name": "Sound", "url": "https://rss.arxiv.org/rss/cs.SD"},
+    {"id": "eess.AS", "name": "Audio & Speech", "url": "https://rss.arxiv.org/rss/eess.AS"},
+)
+
+ARXIV_MAX_AGE_DAYS = 7
+
+# HN keyword filter for video/audio/agent AI topics
+HN_KEYWORDS: tuple[str, ...] = (
+    "video editing", "video understanding", "video search", "video analysis",
+    "audio understanding", "audio analysis", "music generation", "speech recognition",
+    "whisper", "text to video", "video generation", "video llm", "video agent",
+    "auto editing", "video clipping", "speaker diarization", "source separation",
+    "beat tracking", "video retrieval", "multimodal", "vision language",
+    "mcp server", "ai agent", "llm agent",
+)
+
+HN_ALGOLIA_API = "https://hn.algolia.com/api/v1/search"
+HN_MAX_AGE_DAYS = 3
+
 
 @dataclass
 class RawItem:
@@ -1848,6 +1930,226 @@ def fetch_newsnow(session: requests.Session, now: datetime) -> list[RawItem]:
     return out
 
 
+# ---------------------------------------------------------------------------
+# GitHub Topics Radar fetchers
+# ---------------------------------------------------------------------------
+
+def fetch_github_topics(session: requests.Session, now: datetime) -> list[RawItem]:
+    """Fetch new repos tagged with video/audio/music/agent AI topics via GitHub Search API."""
+    site_id = "github_topics"
+    site_name = "GitHub Topics"
+    out: list[RawItem] = []
+    cutoff_date = (now - timedelta(days=GITHUB_TOPICS_MAX_AGE_DAYS)).strftime("%Y-%m-%d")
+    seen_repos: set[str] = set()
+    batch_size = 8  # topics per query (comma-separated = OR)
+
+    topics = list(GITHUB_TOPICS)
+    batches: list[str] = []
+    for i in range(0, len(topics), batch_size):
+        batch = topics[i : i + batch_size]
+        batches.append(",".join(batch))
+
+    api_headers = {
+        "User-Agent": BROWSER_UA,
+        "Accept": "application/vnd.github.v3+json",
+    }
+
+    for batch_query in batches:
+        q = f"topic:{batch_query} created:>{cutoff_date}"
+        try:
+            resp = session.get(
+                "https://api.github.com/search/repositories",
+                params={"q": q, "sort": "created", "order": "desc", "per_page": 30},
+                headers=api_headers,
+                timeout=20,
+            )
+            # Handle rate limit gracefully
+            if resp.status_code == 403:
+                time.sleep(10)
+                continue
+            resp.raise_for_status()
+            data = resp.json()
+        except Exception:
+            continue
+
+        for repo in data.get("items", []):
+            full_name = repo.get("full_name", "")
+            if full_name in seen_repos:
+                continue
+            seen_repos.add(full_name)
+
+            created_at = parse_iso(repo.get("created_at"))
+            if not created_at or created_at < now - timedelta(days=GITHUB_TOPICS_MAX_AGE_DAYS):
+                continue
+
+            repo_topics = repo.get("topics", [])
+            matched = [t for t in repo_topics if t in GITHUB_TOPICS]
+            topic_label = matched[0] if matched else "unknown"
+            desc = repo.get("description") or ""
+            stars = repo.get("stargazers_count", 0)
+
+            out.append(RawItem(
+                site_id=site_id,
+                site_name=site_name,
+                source=f"github:{topic_label}",
+                title=f"{full_name} - {desc}" if desc else full_name,
+                url=repo.get("html_url", ""),
+                published_at=created_at,
+                meta={"topics": matched, "stars": stars, "language": repo.get("language", "")},
+            ))
+
+        # Respect rate limit: ~1 req/sec for unauthenticated
+        time.sleep(1.5)
+
+    return out
+
+
+def fetch_github_releases(session: requests.Session, now: datetime) -> list[RawItem]:
+    """Fetch recent releases from core video/audio/agent repos."""
+    site_id = "github_releases"
+    site_name = "GitHub Releases"
+    out: list[RawItem] = []
+    cutoff = now - timedelta(days=GITHUB_RELEASES_MAX_AGE_DAYS)
+    ua = {"User-Agent": BROWSER_UA, "Accept": "application/atom+xml, application/xml, text/xml, */*"}
+
+    def fetch_one_repo(repo_info: dict[str, str]) -> list[RawItem]:
+        owner, repo, name = repo_info["owner"], repo_info["repo"], repo_info["name"]
+        url = f"https://github.com/{owner}/{repo}/releases.atom"
+        try:
+            resp = session.get(url, timeout=20, headers=ua)
+            resp.raise_for_status()
+        except Exception:
+            return []
+        entries = parse_feed_entries_via_xml(resp.content)
+        items: list[RawItem] = []
+        for entry in entries:
+            title = maybe_fix_mojibake(entry.get("title", "").strip())
+            link = entry.get("link", "").strip()
+            if not title or not link:
+                continue
+            published = parse_date_any(entry.get("published"), now) or parse_date_any(entry.get("updated"), now)
+            if not published:
+                continue
+            if published < cutoff:
+                continue
+            items.append(RawItem(
+                site_id=site_id,
+                site_name=site_name,
+                source=name,
+                title=f"[{name}] {title}",
+                url=link,
+                published_at=published,
+                meta={"owner": owner, "repo": repo},
+            ))
+        return items
+
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        futures = {pool.submit(fetch_one_repo, r): r["name"] for r in GITHUB_CORE_REPOS}
+        for future in as_completed(futures):
+            try:
+                out.extend(future.result())
+            except Exception:
+                continue
+
+    return out
+
+
+def fetch_arxiv_feeds(session: requests.Session, now: datetime) -> list[RawItem]:
+    """Fetch recent papers from arXiv category feeds (cs.CV, cs.MM, cs.SD, eess.AS)."""
+    site_id = "arxiv"
+    site_name = "arXiv"
+    out: list[RawItem] = []
+    cutoff = now - timedelta(days=ARXIV_MAX_AGE_DAYS)
+    ua = {"User-Agent": BROWSER_UA, "Accept": "application/rss+xml, application/xml, text/xml, */*"}
+
+    for cat in ARXIV_CATEGORIES:
+        try:
+            resp = session.get(cat["url"], timeout=30, headers=ua)
+            resp.raise_for_status()
+        except Exception:
+            continue
+        entries = parse_feed_entries_via_xml(resp.content)
+        for entry in entries:
+            title = maybe_fix_mojibake(entry.get("title", "").strip())
+            link = entry.get("link", "").strip()
+            if not title or not link:
+                continue
+            published = parse_date_any(entry.get("published"), now) or parse_date_any(entry.get("updated"), now)
+            if not published:
+                continue
+            if published < cutoff:
+                continue
+            # arXiv titles often start with "arXiv:" prefix, clean it
+            title = re.sub(r"^arXiv:\d+\.\d+\s*", "", title).strip()
+            out.append(RawItem(
+                site_id=site_id,
+                site_name=site_name,
+                source=cat["name"],
+                title=title,
+                url=link,
+                published_at=published,
+                meta={"category": cat["id"]},
+            ))
+
+    return out
+
+
+def fetch_hn_ai_filtered(session: requests.Session, now: datetime) -> list[RawItem]:
+    """Fetch AI video/audio/agent posts from Hacker News via Algolia API."""
+    site_id = "hn_ai"
+    site_name = "Hacker News · AI"
+    out: list[RawItem] = []
+    cutoff_ts = int((now - timedelta(days=HN_MAX_AGE_DAYS)).timestamp())
+    seen_ids: set[int] = set()
+
+    for keyword in HN_KEYWORDS:
+        try:
+            resp = session.get(
+                HN_ALGOLIA_API,
+                params={
+                    "query": keyword,
+                    "tags": "story",
+                    "numericFilters": f"created_at_i>{cutoff_ts}",
+                    "hitsPerPage": 15,
+                },
+                timeout=15,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+        except Exception:
+            continue
+
+        for hit in data.get("hits", []):
+            hn_id = hit.get("objectID")
+            if not hn_id:
+                continue
+            try:
+                hn_id_int = int(hn_id)
+            except (ValueError, TypeError):
+                continue
+            if hn_id_int in seen_ids:
+                continue
+            seen_ids.add(hn_id_int)
+
+            title = (hit.get("title") or "").strip()
+            url = hit.get("url") or f"https://news.ycombinator.com/item?id={hn_id}"
+            if not title:
+                continue
+            created = parse_unix_timestamp(hit.get("created_at_i")) or now
+
+            out.append(RawItem(
+                site_id=site_id,
+                site_name=site_name,
+                source=f"HN · {keyword}",
+                title=title,
+                url=url,
+                published_at=created,
+                meta={"hn_id": hn_id_int, "points": hit.get("points", 0)},
+            ))
+
+    return out
+
+
 def collect_all(session: requests.Session, now: datetime) -> tuple[list[RawItem], list[dict[str, Any]]]:
     tasks = [
         ("official_ai", "Official AI Updates", fetch_official_ai_updates),
@@ -1863,6 +2165,10 @@ def collect_all(session: requests.Session, now: datetime) -> tuple[list[RawItem]
         ("aibase", "AIbase", fetch_aibase),
         ("aihot", "AI HOT", fetch_aihot),
         ("newsnow", "NewsNow", fetch_newsnow),
+        ("github_topics", "GitHub Topics", fetch_github_topics),
+        ("github_releases", "GitHub Releases", fetch_github_releases),
+        ("arxiv", "arXiv", fetch_arxiv_feeds),
+        ("hn_ai", "Hacker News · AI", fetch_hn_ai_filtered),
     ]
 
     raw_items: list[RawItem] = []
