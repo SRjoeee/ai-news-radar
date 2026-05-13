@@ -1,45 +1,51 @@
 # AI News Radar — Design System
 
+## Design Philosophy
+Dark editorial theme — Bloomberg Terminal density meets The Verge editorial courage. Designed for an AI practitioner scanning signals at midnight.
+
 ## Color Strategy
-Restrained — tinted neutrals + one accent. The accent (#126a73) is a deep teal that evokes radar screens and technical precision.
+OKLCH-tinted neutrals toward amber brand hue (chroma ~0.008). No pure black or white.
 
-### Light Theme
-- Background: warm off-white (#f6f6f2) — not sterile white
-- Surface: pure white for content cards
-- Ink: near-black with warm undertone (#171717)
-- Muted: warm gray (#66645f)
-- Accent: deep teal (#126a73) — used sparingly for active states, links, key data
-- Accent warm: burnt orange (#b55231) — for warnings and builder sources
-- Good/OK: forest green (#1f7a4d)
-- Warn: amber (#9a6700)
-- Bad: crimson (#b42318)
-
-### Dark Mode
-Not implemented yet. Future consideration.
+### Dark Theme (active)
+- Background: deep navy-black (#0f1117)
+- Surface: #181b25
+- Surface hover: #1e2230
+- Ink: warm off-white (#e8e6e0)
+- Muted: cool gray (#7a7d85)
+- Line: #2a2d37
+- Accent: amber (#e8a230) — used for active states, links, key data
+- Good: bright green (#4ade80)
+- Warn: bright yellow (#facc15)
+- Bad: bright red (#f87171)
 
 ## Typography
-System font stack with CJK support. No custom web fonts — speed and reliability over personality.
+Three-font system:
+- Display: DM Sans (700, 800) + Noto Sans SC — headings
+- Body: system-ui + Noto Sans SC — content
+- Mono: JetBrains Mono (400, 500) + SF Mono — data, time, labels
 
-Hierarchy:
-- H1: 36px / 1.08 line-height — page title only
-- H2: 20px — section headers
-- H3: 16px — group headers
-- Body: 14-16px / 1.42 — content
-- Caption: 12-13px — metadata, labels
+Perfect fourth scale (1.333):
+- H1: 38px / 1.05 line-height — page title
+- H2: 18px — section headers
+- H3: 15px — group headers
+- Body: 15px / 1.55 — content
+- Caption: 12-13px — metadata
+- Micro: 11px — tags, labels
 
-## Spacing
-- Base unit: 8px
-- Page padding: 26px horizontal, 18px on mobile
-- Card padding: 13-16px
-- Section gaps: 16px
-- Item gaps: 8-12px
+## Layout
+- Max width: 1080px, centered
+- 2-column grid: feed (1fr) + sidebar (300px)
+- Responsive: 860px single column, sidebar above feed
+- Page padding: 40px 28px, 24px 16px on mobile
 
 ## Components
-- News card: minimal — meta row + title link, no container border
-- Stats: 4-column grid with bordered cells
-- Coverage strip: 6-column grid showing source health
-- Pills: rounded filter chips
-- Mode switch: segmented control
+- News card: title-first, meta below — no container border, 1px separator
+- Stats: 4 data points — big mono number (amber) + small uppercase label
+- Coverage strip: small chips with colored dots
+- Pills: rounded filter chips, amber active state
+- Mode switch: segmented control, amber active
+- Site group: 2px amber left border header
+- Source health: metric cards + issue lists
 
 ## Motion
-Minimal. No animations on data load. Focus mode switch transitions only.
+Minimal. No animations on data load. Focus/hover transitions only (0.15s).

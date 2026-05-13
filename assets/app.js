@@ -58,6 +58,12 @@ const SOURCE_KINDS = {
   aihubtoday: { label: "AI站点", tone: "aihub" },
   aibase: { label: "AI站点", tone: "aihub" },
   newsnow: { label: "聚合", tone: "aggregate" },
+  github_topics: { label: "GitHub", tone: "builders" },
+  github_releases: { label: "Releases", tone: "builders" },
+  arxiv: { label: "arXiv", tone: "official" },
+  hn_ai: { label: "HN", tone: "newsletter" },
+  aihot: { label: "AI热点", tone: "aihub" },
+  opmlrss: { label: "RSS", tone: "aggregate" },
 };
 
 function fmtNumber(n) {
@@ -98,7 +104,7 @@ function setStats(payload) {
   cards.forEach(([k, v]) => {
     const node = document.createElement("div");
     node.className = "stat";
-    node.innerHTML = `<div class="k">${k}</div><div class="v">${v}</div>`;
+    node.innerHTML = `<div class="v">${v}</div><div class="k">${k}</div>`;
     statsEl.appendChild(node);
   });
 }
@@ -281,15 +287,8 @@ function getFilteredItems() {
 
 function renderItemNode(item) {
   const node = itemTpl.content.firstElementChild.cloneNode(true);
-  node.querySelector(".site").textContent = item.site_name;
-  const kind = sourceKind(item.site_id);
-  const categoryEl = node.querySelector(".category");
-  categoryEl.textContent = kind.label;
-  categoryEl.classList.add(`kind-${kind.tone}`);
-  node.querySelector(".source").textContent = `分区: ${item.source}`;
-  node.querySelector(".time").textContent = fmtTime(item.published_at || item.first_seen_at);
 
-  const titleEl = node.querySelector(".title");
+  const titleEl = node.querySelector(".card-title");
   const zh = (item.title_zh || "").trim();
   const en = (item.title_en || "").trim();
   titleEl.textContent = "";
@@ -305,6 +304,15 @@ function renderItemNode(item) {
     titleEl.textContent = item.title || zh || en;
   }
   titleEl.href = item.url;
+
+  node.querySelector(".site").textContent = item.site_name;
+  const kind = sourceKind(item.site_id);
+  const categoryEl = node.querySelector(".category");
+  categoryEl.textContent = kind.label;
+  categoryEl.classList.add(`kind-${kind.tone}`);
+  node.querySelector(".source").textContent = `分区: ${item.source}`;
+  node.querySelector(".time").textContent = fmtTime(item.published_at || item.first_seen_at);
+
   return node;
 }
 
