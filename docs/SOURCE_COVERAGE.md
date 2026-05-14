@@ -88,6 +88,10 @@ baseline, then let the aggregator layer add breadth.
 - **AI HOT**: reads the public RSS feed at `https://aihot.virxact.com/feed.xml`,
   with equivalent Virxact RSS endpoints as fallbacks if the primary endpoint
   temporarily returns zero parseable items.
+- **GitHub Trending**: reads the community-maintained public RSS at
+  `mshibanami.github.io/GitHubTrendingRSS/{daily,weekly}/all.xml`. Avoids
+  scraping `github.com/trending` HTML and keeps the fetcher stable across
+  GitHub UI changes.
 
 ## Disabled Default Sources
 
@@ -116,6 +120,10 @@ to pass through the real project fetch path on GitHub Actions:
   Google AI Blog, and Microsoft AI Blog.
 - **AI media / builder feeds**: Wired AI, InfoQ CN, NVIDIA Generative AI Blog,
   宝玉, and Simon Willison.
+- **AI newsletters**: Marcus on AI (Gary Marcus), Latent Space, Import AI
+  (Jack Clark), Interconnects (Nathan Lambert), Normal Technology (AI Snake
+  Oil), One Useful Thing (Ethan Mollick), Ahead of AI (Sebastian Raschka),
+  Last Week in AI.
 
 In GitHub Actions, `feeds/follow.example.opml` is also used as the public demo
 fallback when no private `FOLLOW_OPML_B64` secret is configured. This keeps the

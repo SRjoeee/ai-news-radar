@@ -1998,6 +1998,58 @@ def fetch_hn_ai_filtered(session: requests.Session, now: datetime) -> list[RawIt
     return out
 
 
+GITHUB_TRENDING_FEEDS: tuple[tuple[str, str], ...] = (
+    ("daily", "https://mshibanami.github.io/GitHubTrendingRSS/daily/all.xml"),
+    ("weekly", "https://mshibanami.github.io/GitHubTrendingRSS/weekly/all.xml"),
+)
+GITHUB_TRENDING_MAX_AGE_DAYS = 8
+
+
+def fetch_github_trending(session: requests.Session, now: datetime) -> list[RawItem]:
+    """Fetch trending GitHub repositories via the public mshibanami RSS feeds.
+
+    Uses the community-maintained daily/weekly all-language feeds so we don't have
+    to scrape github.com/trending HTML ourselves.
+    """
+    site_id = "github_trending"
+    site_name = "GitHub Trending"
+    cutoff = now - timedelta(days=GITHUB_TRENDING_MAX_AGE_DAYS)
+    out: list[RawItem] = []
+    seen_urls: set[str] = set()
+    ua = {
+        "User-Agent": BROWSER_UA,
+        "Accept": "application/rss+xml, application/xml, text/xml, */*",
+    }
+
+    for window_name, feed_url in GITHUB_TRENDING_FEEDS:
+        try:
+            resp = session.get(feed_url, timeout=30, headers=ua)
+            resp.raise_for_status()
+        except Exception:
+            continue
+        entries = parse_feed_entries_via_xml(resp.content)
+        for entry in entries:
+            title = maybe_fix_mojibake(str(entry.get("title", "")).strip())
+            link = str(entry.get("link", "")).strip()
+            if not title or not link or link in seen_urls:
+                continue
+            seen_urls.add(link)
+            published = parse_date_any(entry.get("published"), now) or now
+            if published < cutoff:
+                continue
+            out.append(RawItem(
+                site_id=site_id,
+                site_name=site_name,
+                source=f"GitHub Trending · {window_name}",
+                title=title,
+                url=link,
+                published_at=published,
+                meta={"feed_window": window_name},
+            ))
+
+    return out
+
+
 def collect_all(session: requests.Session, now: datetime) -> tuple[list[RawItem], list[dict[str, Any]]]:
     tasks = [
         ("official_ai", "Official AI Updates", fetch_official_ai_updates),
@@ -2013,6 +2065,7 @@ def collect_all(session: requests.Session, now: datetime) -> tuple[list[RawItem]
         ("findit", "Findit-AI", fetch_findit_releases),
         ("github_topics", "GitHub Topics", fetch_github_topics),
         ("github_releases", "GitHub Releases", fetch_github_releases),
+        ("github_trending", "GitHub Trending", fetch_github_trending),
         ("arxiv", "arXiv", fetch_arxiv_feeds),
         ("hn_ai", "Hacker News · AI", fetch_hn_ai_filtered),
     ]

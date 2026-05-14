@@ -78,5 +78,63 @@
         htmlUrl="https://simonwillison.net/"
       />
     </outline>
+    <outline text="AI Newsletters">
+      <outline
+        text="Marcus on AI (Gary Marcus)"
+        title="Marcus on AI"
+        type="rss"
+        xmlUrl="https://garymarcus.substack.com/feed"
+        htmlUrl="https://garymarcus.substack.com/"
+      />
+      <outline
+        text="Latent Space"
+        title="Latent Space"
+        type="rss"
+        xmlUrl="https://www.latent.space/feed"
+        htmlUrl="https://www.latent.space/"
+      />
+      <outline
+        text="Import AI (Jack Clark)"
+        title="Import AI"
+        type="rss"
+        xmlUrl="https://importai.substack.com/feed"
+        htmlUrl="https://importai.substack.com/"
+      />
+      <outline
+        text="Interconnects (Nathan Lambert)"
+        title="Interconnects"
+        type="rss"
+        xmlUrl="https://www.interconnects.ai/feed"
+        htmlUrl="https://www.interconnects.ai/"
+      />
+      <outline
+        text="Normal Technology (AI Snake Oil)"
+        title="Normal Technology"
+        type="rss"
+        xmlUrl="https://www.normaltech.ai/feed"
+        htmlUrl="https://www.normaltech.ai/"
+      />
+      <outline
+        text="One Useful Thing (Ethan Mollick)"
+        title="One Useful Thing"
+        type="rss"
+        xmlUrl="https://www.oneusefulthing.org/feed"
+        htmlUrl="https://www.oneusefulthing.org/"
+      />
+      <outline
+        text="Ahead of AI (Sebastian Raschka)"
+        title="Ahead of AI"
+        type="rss"
+        xmlUrl="https://magazine.sebastianraschka.com/feed"
+        htmlUrl="https://magazine.sebastianraschka.com/"
+      />
+      <outline
+        text="Last Week in AI"
+        title="Last Week in AI"
+        type="rss"
+        xmlUrl="https://lastweekin.ai/feed"
+        htmlUrl="https://lastweekin.ai/"
+      />
+    </outline>
   </body>
 </opml>
