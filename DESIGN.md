@@ -1,51 +1,59 @@
-# AI News Radar — Design System
+# AI News Radar — Wired Editorial Design
 
 ## Design Philosophy
-Dark editorial theme — Bloomberg Terminal density meets The Verge editorial courage. Designed for an AI practitioner scanning signals at midnight.
 
-## Color Strategy
-OKLCH-tinted neutrals toward amber brand hue (chroma ~0.008). No pure black or white.
+White canvas, black ink, serif display, square edges. Inspired by Wired magazine's editorial typography and Bloomberg Terminal's data density.
 
-### Dark Theme (active)
-- Background: deep navy-black (#0f1117)
-- Surface: #181b25
-- Surface hover: #1e2230
-- Ink: warm off-white (#e8e6e0)
-- Muted: cool gray (#7a7d85)
-- Line: #2a2d37
-- Accent: amber (#e8a230) — used for active states, links, key data
-- Good: bright green (#4ade80)
-- Warn: bright yellow (#facc15)
-- Bad: bright red (#f87171)
+## Color Tokens
+
+| Token | Value | Usage |
+|-------|-------|-------|
+| `--bg` | `#ffffff` | Page background |
+| `--ink` | `#000000` | Primary text, headings |
+| `--muted` | `#757575` | Secondary text, labels |
+| `--line` | `#e0e0e0` | Dividers, borders |
+| `--link` | `#057dbc` | Hyperlinks |
+| `--good` | `#1a7a3a` | Success indicators |
+| `--warn` | `#9a6700` | Warning indicators |
+| `--bad` | `#b42318` | Error indicators |
+| `--radius` | `0px` | Square corners everywhere |
 
 ## Typography
-Three-font system:
-- Display: DM Sans (700, 800) + Noto Sans SC — headings
-- Body: system-ui + Noto Sans SC — content
-- Mono: JetBrains Mono (400, 500) + SF Mono — data, time, labels
 
-Perfect fourth scale (1.333):
-- H1: 38px / 1.05 line-height — page title
-- H2: 18px — section headers
-- H3: 15px — group headers
-- Body: 15px / 1.55 — content
-- Caption: 12-13px — metadata
-- Micro: 11px — tags, labels
+| Role | Font | Weight | Size |
+|------|------|--------|------|
+| Display | Playfair Display | 400 | 48px hero, 32px stats, 18px cards |
+| Body | Source Serif 4 | 400 | 16px body, 14px subtitles |
+| Sans | Inter | 400/700 | 13px metadata, 11px labels |
+| Mono | JetBrains Mono | 400 | 12px timestamps, 11px data |
+
+CJK fallback: Noto Serif SC (serif), Noto Sans SC (sans).
 
 ## Layout
+
 - Max width: 1080px, centered
-- 2-column grid: feed (1fr) + sidebar (300px)
-- Responsive: 860px single column, sidebar above feed
-- Page padding: 40px 28px, 24px 16px on mobile
+- Hero: 2px black bottom border, magazine masthead style
+- Stats: horizontal strip, no borders, just spacing
+- News cards: no card borders, 1px hairline dividers between items
+- Site group headers: 2px black bottom border, sticky on scroll
+- Sidebar: right column (300px) on desktop, top on mobile
 
-## Components
-- News card: title-first, meta below — no container border, 1px separator
-- Stats: 4 data points — big mono number (amber) + small uppercase label
-- Coverage strip: small chips with colored dots
-- Pills: rounded filter chips, amber active state
-- Mode switch: segmented control, amber active
-- Site group: 2px amber left border header
-- Source health: metric cards + issue lists
+## Component Patterns
 
-## Motion
-Minimal. No animations on data load. Focus/hover transitions only (0.15s).
+- **Category badges**: bordered pills, 0px radius, color by tone (official=black, newsletter=blue, builders=gray)
+- **Coverage dots**: 6px colored circles (green/yellow/red) inline with labels
+- **Mode switch**: inline button group with 1px black border
+- **Source health**: metric cards with colored values (ok=green, warn=yellow, bad=red)
+
+## Responsive Breakpoints
+
+- 860px: single column, sidebar moves to top
+- 560px: smaller title (28px), compact controls
+
+## What We Don't Use
+
+- No rounded corners
+- No gradients or shadows
+- No card backgrounds (transparent by default)
+- No filled category badges (bordered only)
+- No sans-serif display text
