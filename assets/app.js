@@ -219,7 +219,7 @@ function renderSiteFilters() {
 
   sitePillsEl.innerHTML = "";
 
-  // "All" button — clears filter
+  // "All" button — always first, clears filter to show everything
   const allBtn = document.createElement("button");
   allBtn.className = `pill ${!hasFilter ? "active" : ""}`;
   allBtn.textContent = "全部";
@@ -230,31 +230,29 @@ function renderSiteFilters() {
   };
   sitePillsEl.appendChild(allBtn);
 
-  // "None" button — selects all sites (explicit multi-select)
-  const noneBtn = document.createElement("button");
-  noneBtn.className = `pill ${hasFilter && state.siteFilters.size === stats.length ? "active" : ""}`;
-  noneBtn.textContent = "全不选";
-  noneBtn.onclick = () => {
-    stats.forEach((s) => state.siteFilters.add(s.site_id));
-    renderSiteFilters();
-    renderList();
-  };
-  sitePillsEl.appendChild(noneBtn);
-
   // Per-site pills
   stats.forEach((s) => {
+    if (s.count === 0) return; // Skip sites with 0 items
     const btn = document.createElement("button");
+    // When no filter: all pills are active (everything visible)
+    // When filter active: only selected pills are active
     const active = hasFilter ? state.siteFilters.has(s.site_id) : true;
     btn.className = `pill ${active ? "active" : ""}`;
     btn.textContent = `${s.site_name} ${s.count}`;
     btn.onclick = () => {
       if (!hasFilter) {
-        // No filter yet → clicking a site selects ONLY that site
+        // First click: switch from "show all" to "show only this site"
         state.siteFilters.clear();
         state.siteFilters.add(s.site_id);
       } else if (state.siteFilters.has(s.site_id)) {
+        // Toggle off: remove from filter
         state.siteFilters.delete(s.site_id);
+        // If filter is now empty, revert to "show all" state
+        if (state.siteFilters.size === 0) {
+          // Empty filter = show all, which is correct
+        }
       } else {
+        // Toggle on: add to filter
         state.siteFilters.add(s.site_id);
       }
       renderSiteFilters();
