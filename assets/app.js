@@ -208,9 +208,11 @@ function saveSiteFiltersToHash() {
 
 function loadSiteFiltersFromHash() {
   const match = location.hash.match(/sites=([^&]+)/);
-  if (match) {
-    match[1].split(",").forEach((id) => { if (id) state.siteFilters.add(id); });
-  }
+  if (!match) return;
+  const validIds = new Set(currentSiteStats().filter((s) => s.count > 0).map((s) => s.site_id));
+  match[1].split(",").forEach((id) => {
+    if (id && validIds.has(id)) state.siteFilters.add(id);
+  });
 }
 
 function renderSiteFilters() {
