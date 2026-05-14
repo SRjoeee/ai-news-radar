@@ -31,6 +31,29 @@
   --font-mono:    "JetBrains Mono", "SF Mono", monospace;
 }
 
+html[data-theme="dark"] {
+  --bg:          #0e0e10;
+  --surface:     #18181b;
+  --surface-up:  #232327;
+  --ink:         #f1f1f3;
+  --ink-soft:    #d4d4d8;
+  --muted:       #9aa0a6;
+  --line:        #2c2c30;
+  --link:        #4ec3f0;
+  --accent:      #f1f1f3;
+  --accent-dim:  rgba(255, 255, 255, 0.06);
+  --accent-glow: rgba(255, 255, 255, 0.10);
+  --good:        #4ade80;
+  --good-dim:    rgba(74, 222, 128, 0.10);
+  --warn:        #facc15;
+  --warn-dim:    rgba(250, 204, 21, 0.10);
+  --bad:         #f87171;
+  --bad-dim:     rgba(248, 113, 113, 0.10);
+  color-scheme: dark;
+}
+
+html[data-theme="light"] { color-scheme: light; }
+
 * { box-sizing: border-box; }
 
 html, body {
@@ -96,6 +119,38 @@ button { cursor: pointer; }
   font-size: 12px;
   color: var(--muted);
   white-space: nowrap;
+}
+
+.hero-title-row .hero-actions {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.theme-toggle {
+  border: 1px solid var(--ink);
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 4px 10px;
+  cursor: pointer;
+  border-radius: 0;
+  transition: background 0.15s, color 0.15s;
+}
+
+.theme-toggle:hover {
+  background: var(--ink);
+  color: var(--bg);
+}
+
+.theme-toggle:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
 }
 
 .hero-sub {
@@ -249,6 +304,189 @@ button { cursor: pointer; }
   background: var(--ink);
 }
 
+/* ── Site Pills Bar ── */
+.site-pills-bar {
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 14px;
+}
+
+.signal-chips-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: -8px 0 20px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.signal-chips-label {
+  font-family: var(--font-sans);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.signal-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.signal-chip {
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 0;
+  cursor: pointer;
+  letter-spacing: 0.02em;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.signal-chip:hover {
+  color: var(--ink);
+  border-color: var(--ink);
+}
+
+.signal-chip.active {
+  background: var(--ink);
+  color: var(--bg);
+  border-color: var(--ink);
+}
+
+.signal-chip .signal-chip-count {
+  margin-left: 4px;
+  font-family: var(--font-mono);
+  font-weight: 400;
+  opacity: 0.75;
+}
+
+.signal-clear {
+  margin-left: auto;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--font-sans);
+  font-size: 11px;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 0;
+}
+
+.signal-clear:hover {
+  color: var(--ink);
+}
+
+.site-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--ink);
+  background: transparent;
+  color: var(--ink);
+  border-radius: 0;
+  padding: 5px 12px;
+  cursor: pointer;
+  font-size: 12px;
+  font-family: var(--font-sans);
+  font-weight: 700;
+  transition: background 0.15s, color 0.15s, border-color 0.15s, opacity 0.15s;
+  user-select: none;
+  position: relative;
+}
+
+.pill:hover {
+  background: var(--surface);
+}
+
+.pill.active {
+  background: var(--ink);
+  color: var(--bg);
+}
+
+.pill.active:hover {
+  background: var(--ink-soft);
+}
+
+/* All pill — distinct styling */
+.pill.pill-all {
+  border-width: 1.5px;
+  padding: 5px 14px;
+}
+
+/* Grip handle — 2x3 dot grid, consistent cross-browser */
+.pill-grip {
+  display: inline-grid;
+  grid-template-columns: repeat(2, 3px);
+  grid-template-rows: repeat(3, 3px);
+  gap: 2px;
+  width: 10px;
+  height: 14px;
+  cursor: grab;
+  opacity: 0;
+  transition: opacity 0.15s;
+  flex-shrink: 0;
+  align-self: center;
+}
+
+.pill-grip-dot {
+  display: block;
+  width: 3px;
+  height: 3px;
+  background: currentColor;
+  border-radius: 50%;
+  opacity: 0.4;
+}
+
+.pill:hover .pill-grip,
+.pill:focus-within .pill-grip {
+  opacity: 1;
+}
+
+/* Drag states — monochrome, editorial */
+.pill.dragging {
+  opacity: 0.3;
+}
+
+.pill.drag-over {
+  border-color: var(--ink);
+  background: var(--accent-dim);
+}
+
+.pill[draggable="true"] {
+  -webkit-user-drag: element;
+}
+
+/* Hidden site pill — inactive, re-enablable */
+.pill-hidden {
+  opacity: 0.4;
+  border-style: dashed;
+}
+
+.pill-hidden:hover {
+  opacity: 0.7;
+}
+
+/* Pill label */
+.pill-label {
+  white-space: nowrap;
+}
+
 /* ── Coverage Strip ── */
 .coverage-strip {
   display: flex;
@@ -349,33 +587,6 @@ button { cursor: pointer; }
   padding: 14px 0;
 }
 
-.site-pills {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.pill {
-  border: 1px solid var(--ink);
-  background: transparent;
-  color: var(--ink);
-  border-radius: 0;
-  padding: 4px 12px;
-  cursor: pointer;
-  font-size: 12px;
-  font-family: var(--font-sans);
-  font-weight: 700;
-  transition: all 0.15s;
-}
-
-.pill:hover {
-  background: var(--surface);
-}
-
-.pill.active {
-  background: var(--ink);
-  color: var(--bg);
-}
 
 /* ── Source Health (inside advanced) ── */
 .source-health {
@@ -464,6 +675,29 @@ button { cursor: pointer; }
 /* ═══════════════════════════════════════════════
    Layout — Left Nav + Bento Grid
    ═══════════════════════════════════════════════ */
+
+.layout-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 12px;
+}
+
+.layout-head h2 {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ink);
+}
+
+.result-count {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--muted);
+}
 
 .layout-main {
   display: grid;
@@ -558,7 +792,8 @@ button { cursor: pointer; }
   justify-content: space-between;
   align-items: center;
   gap: 8px;
-  padding: 10px 14px;
+  padding: 0 14px;
+  height: 40px;
   border-bottom: 2px solid var(--ink);
   background: var(--bg);
   position: sticky;
@@ -579,11 +814,92 @@ button { cursor: pointer; }
   text-overflow: ellipsis;
 }
 
+.bento-box-head h3 a {
+  color: inherit;
+  text-decoration: none;
+  transition: color 0.15s;
+}
+
+.bento-box-head h3 a:hover {
+  color: var(--link);
+}
+
+.bento-box-actions {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  height: 20px;
+  flex-shrink: 0;
+}
+
 .bento-box-count {
   font-family: var(--font-mono);
   font-size: 11px;
   color: var(--muted);
+  transition: opacity 0.12s;
+}
+
+.bento-box-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
   flex-shrink: 0;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s, color 0.15s;
+}
+
+/* In ordinary bento boxes, count and close stack at the same spot;
+   hover the actions wrap to reveal the close button. The count sits in
+   normal flow so it gives the wrap its width; the close is absolute on top. */
+.bento-box-actions > .bento-box-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0 4px;
+  min-width: 36px;
+  pointer-events: none;
+}
+
+.bento-box-actions > .bento-box-close {
+  position: absolute;
+  inset: 0;
+  width: auto;
+  height: auto;
+}
+
+.bento-box-actions:hover > .bento-box-count {
+  opacity: 0;
+}
+
+.bento-box-actions:hover > .bento-box-close {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* WaytoAGI close sits directly in the head (no actions wrap) — keep the
+   classic head:hover reveal so it stays consistent with its switch buttons. */
+.bento-box-head > .bento-box-close {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.bento-box-head:hover > .bento-box-close {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.bento-box-close:hover {
+  color: var(--ink);
 }
 
 .bento-box-body {
@@ -731,12 +1047,7 @@ button { cursor: pointer; }
 
 /* ── Bento Box Hover Enhancement ── */
 .bento-box {
-  transition: border-color 0.15s, box-shadow 0.15s;
-}
-
-.bento-box:hover {
-  border-color: var(--ink);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  transition: border-color 0.15s;
 }
 
 /* ── Nav Item Active Indicator ── */
@@ -748,17 +1059,11 @@ button { cursor: pointer; }
 }
 
 /* ── WaytoAGI Bento Module ── */
-.bento-waytoagi-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 8px;
-}
-
 .bento-waytoagi-tools {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-shrink: 0;
 }
 
 .bento-waytoagi-switch {
@@ -904,6 +1209,10 @@ button { cursor: pointer; }
 @media (max-width: 860px) {
   .shell {
     padding: 24px 16px 60px;
+  }
+
+  .pill-grip {
+    opacity: 0.4;
   }
 
   .hero h1 {

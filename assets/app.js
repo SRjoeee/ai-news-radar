@@ -13,11 +13,21 @@ const state = {
   siteFilters: new Set(),
   query: "",
   mode: "ai",
+  siteOrder: [],
+  hiddenSites: new Set(),
+  waytoagiVisible: true,
   waytoagiMode: "today",
   waytoagiData: null,
   sourceStatus: null,
   generatedAt: null,
+  bilingual: true,
+  signalFilters: new Set(),
 };
+
+try {
+  const saved = localStorage.getItem("ainr-bilingual");
+  if (saved === "0" || saved === "1") state.bilingual = saved === "1";
+} catch (_) {}
 
 const statsEl = document.getElementById("stats");
 const sitePillsEl = document.getElementById("sitePills");
@@ -36,6 +46,26 @@ const allDedupeLabelEl = document.getElementById("allDedupeLabel");
 const advancedSummaryEl = document.getElementById("advancedSummary");
 const sourceHealthEl = document.getElementById("sourceHealth");
 const coverageStripEl = document.getElementById("coverageStrip");
+const themeToggleEl = document.getElementById("themeToggle");
+const translateToggleEl = document.getElementById("translateToggle");
+
+function applyThemeLabel() {
+  if (!themeToggleEl) return;
+  const cur = document.documentElement.dataset.theme === "dark" ? "dark" : "light";
+  themeToggleEl.textContent = cur === "dark" ? "LIGHT" : "DARK";
+  themeToggleEl.setAttribute("aria-label", cur === "dark" ? "切换到日间模式" : "切换到夜间模式");
+}
+
+function toggleTheme() {
+  const cur = document.documentElement.dataset.theme === "dark" ? "dark" : "light";
+  const next = cur === "dark" ? "light" : "dark";
+  document.documentElement.dataset.theme = next;
+  try { localStorage.setItem("ainr-theme", next); } catch (_) {}
+  applyThemeLabel();
+}
+
+applyThemeLabel();
+if (themeToggleEl) themeToggleEl.addEventListener("click", toggleTheme);
 
 const SOURCE_KINDS = {
   official_ai: { label: "官方", tone: "official" },
@@ -51,11 +81,86 @@ const SOURCE_KINDS = {
   findit: { label: "Findit", tone: "official" },
   github_topics: { label: "GitHub", tone: "builders" },
   github_releases: { label: "Releases", tone: "builders" },
+  github_trending: { label: "Trending", tone: "builders" },
   arxiv: { label: "arXiv", tone: "official" },
   hn_ai: { label: "HN", tone: "newsletter" },
   aihot: { label: "AI热点", tone: "aihub" },
   opmlrss: { label: "RSS", tone: "aggregate" },
 };
+
+/* ── Site Order Persistence ── */
+
+const SITE_ORDER_KEY = "ai-news-radar-site-order";
+
+function saveSiteOrder() {
+  const validIds = new Set(currentSiteStats().map((s) => s.site_id));
+  state.siteOrder = state.siteOrder.filter((id) => validIds.has(id));
+  try {
+    localStorage.setItem(SITE_ORDER_KEY, JSON.stringify(state.siteOrder));
+  } catch (_) {}
+}
+
+function loadSiteOrder() {
+  try {
+    const raw = localStorage.getItem(SITE_ORDER_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) state.siteOrder = parsed;
+    }
+  } catch (_) {}
+}
+
+function applySiteOrder(stats) {
+  if (!state.siteOrder.length) return stats;
+  const orderMap = new Map(state.siteOrder.map((id, i) => [id, i]));
+  const ordered = [];
+  const unordered = [];
+  for (const s of stats) {
+    (orderMap.has(s.site_id) ? ordered : unordered).push(s);
+  }
+  ordered.sort((a, b) => orderMap.get(a.site_id) - orderMap.get(b.site_id));
+  unordered.sort((a, b) => b.count - a.count);
+  return [...ordered, ...unordered];
+}
+
+function orderSiteGroups(groups) {
+  if (!state.siteOrder.length) {
+    return groups.sort((a, b) => b[2].length - a[2].length || a[1].localeCompare(b[1], "zh-CN"));
+  }
+  const orderMap = new Map(state.siteOrder.map((id, i) => [id, i]));
+  const ordered = [];
+  const unordered = [];
+  for (const g of groups) {
+    (orderMap.has(g[0]) ? ordered : unordered).push(g);
+  }
+  ordered.sort((a, b) => orderMap.get(a[0]) - orderMap.get(b[0]));
+  unordered.sort((a, b) => b[2].length - a[2].length || a[1].localeCompare(b[1], "zh-CN"));
+  return [...ordered, ...unordered];
+}
+
+/* ── Drag State ── */
+
+const dragState = { gripInitiated: false };
+
+function hideSite(siteId) {
+  if (siteId === "__waytoagi__") {
+    state.waytoagiVisible = false;
+  } else {
+    state.hiddenSites.add(siteId);
+  }
+  renderSiteFilters();
+  renderList();
+}
+
+function showSite(siteId) {
+  if (siteId === "__waytoagi__") {
+    state.waytoagiVisible = true;
+  } else {
+    state.hiddenSites.delete(siteId);
+  }
+  renderSiteFilters();
+  renderList();
+}
 
 function fmtNumber(n) {
   return new Intl.NumberFormat("zh-CN").format(n || 0);
@@ -215,15 +320,29 @@ function loadSiteFiltersFromHash() {
   });
 }
 
+function makePillGrip() {
+  const grip = document.createElement("span");
+  grip.className = "pill-grip";
+  for (let i = 0; i < 6; i++) {
+    const dot = document.createElement("span");
+    dot.className = "pill-grip-dot";
+    grip.appendChild(dot);
+  }
+  return grip;
+}
+
 function renderSiteFilters() {
-  const stats = currentSiteStats();
+  const rawStats = currentSiteStats();
+  const stats = applySiteOrder(rawStats);
   const hasFilter = state.siteFilters.size > 0;
+  const visibleStats = stats.filter((s) => !state.hiddenSites.has(s.site_id));
+  const hiddenStats = stats.filter((s) => state.hiddenSites.has(s.site_id) && s.count > 0);
 
   sitePillsEl.innerHTML = "";
 
-  // "All" button — always first, clears filter to show everything
+  // "All" button — non-draggable
   const allBtn = document.createElement("button");
-  allBtn.className = `pill ${!hasFilter ? "active" : ""}`;
+  allBtn.className = `pill pill-all ${!hasFilter ? "active" : ""}`;
   allBtn.textContent = "全部";
   allBtn.onclick = () => {
     state.siteFilters.clear();
@@ -232,38 +351,142 @@ function renderSiteFilters() {
   };
   sitePillsEl.appendChild(allBtn);
 
-  // Per-site pills
-  stats.forEach((s) => {
-    if (s.count === 0) return; // Skip sites with 0 items
+  // WaytoAGI toggle pill
+  if (state.waytoagiData) {
+    const wBtn = document.createElement("button");
+    wBtn.className = `pill ${state.waytoagiVisible ? "active" : ""}`;
+    wBtn.textContent = "WaytoAGI";
+    wBtn.onclick = () => {
+      if (state.waytoagiVisible) {
+        hideSite("__waytoagi__");
+      } else {
+        showSite("__waytoagi__");
+      }
+    };
+    sitePillsEl.appendChild(wBtn);
+  }
+
+  // Per-site pills — draggable
+  for (const s of visibleStats) {
+    if (s.count === 0) continue;
     const btn = document.createElement("button");
-    // When no filter: all pills are active (everything visible)
-    // When filter active: only selected pills are active
     const active = hasFilter ? state.siteFilters.has(s.site_id) : true;
     btn.className = `pill ${active ? "active" : ""}`;
-    btn.textContent = `${s.site_name} ${s.count}`;
+    btn.dataset.siteId = s.site_id;
+    btn.draggable = true;
+
+    btn.appendChild(makePillGrip());
+
+    const label = document.createElement("span");
+    label.className = "pill-label";
+    label.textContent = `${s.site_name} ${s.count}`;
+    btn.appendChild(label);
+
+    // Grip-only drag initiation
+    btn.addEventListener("mousedown", (e) => {
+      dragState.gripInitiated = !!e.target.closest(".pill-grip");
+    });
+
+    // Click handler with drag guard
     btn.onclick = () => {
+      if (dragState.gripInitiated) {
+        dragState.gripInitiated = false;
+        return;
+      }
       if (!hasFilter) {
-        // First click: switch from "show all" to "show only this site"
         state.siteFilters.clear();
         state.siteFilters.add(s.site_id);
       } else if (state.siteFilters.has(s.site_id)) {
-        // Toggle off: remove from filter
         state.siteFilters.delete(s.site_id);
-        // If filter is now empty, revert to "show all" state
-        if (state.siteFilters.size === 0) {
-          // Empty filter = show all, which is correct
-        }
       } else {
-        // Toggle on: add to filter
         state.siteFilters.add(s.site_id);
       }
       renderSiteFilters();
       renderList();
     };
+
+    // Drag events
+    btn.addEventListener("dragstart", onPillDragStart);
+    btn.addEventListener("dragend", onPillDragEnd);
+    btn.addEventListener("dragover", onPillDragOver);
+    btn.addEventListener("dragenter", onPillDragEnter);
+    btn.addEventListener("dragleave", onPillDragLeave);
+    btn.addEventListener("drop", onPillDrop);
+
     sitePillsEl.appendChild(btn);
-  });
+  }
+
+  // Hidden site pills — inactive, clickable to restore
+  for (const s of hiddenStats) {
+    const btn = document.createElement("button");
+    btn.className = "pill pill-hidden";
+    btn.textContent = `${s.site_name} ${s.count}`;
+    btn.onclick = () => showSite(s.site_id);
+    sitePillsEl.appendChild(btn);
+  }
 
   saveSiteFiltersToHash();
+}
+
+/* ── Pill Drag Handlers ── */
+
+function onPillDragStart(e) {
+  if (!dragState.gripInitiated) {
+    e.preventDefault();
+    return;
+  }
+  const pill = e.currentTarget;
+  pill.classList.add("dragging");
+  e.dataTransfer.effectAllowed = "move";
+  e.dataTransfer.setData("text/plain", pill.dataset.siteId);
+}
+
+function onPillDragEnd(e) {
+  e.currentTarget.classList.remove("dragging");
+  dragState.gripInitiated = false;
+  sitePillsEl.querySelectorAll(".drag-over").forEach((el) => el.classList.remove("drag-over"));
+}
+
+function onPillDragOver(e) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = "move";
+}
+
+function onPillDragEnter(e) {
+  e.preventDefault();
+  const pill = e.currentTarget;
+  if (!pill.classList.contains("dragging")) {
+    pill.classList.add("drag-over");
+  }
+}
+
+function onPillDragLeave(e) {
+  e.currentTarget.classList.remove("drag-over");
+}
+
+function onPillDrop(e) {
+  e.preventDefault();
+  const targetPill = e.currentTarget;
+  targetPill.classList.remove("drag-over");
+
+  const draggedId = e.dataTransfer.getData("text/plain");
+  const targetId = targetPill.dataset.siteId;
+  if (!draggedId || draggedId === targetId) return;
+
+  // Read current DOM order, move dragged item to target position
+  const currentOrder = Array.from(sitePillsEl.querySelectorAll(".pill[data-site-id]"))
+    .map((el) => el.dataset.siteId);
+  const fromIdx = currentOrder.indexOf(draggedId);
+  const toIdx = currentOrder.indexOf(targetId);
+  if (fromIdx === -1 || toIdx === -1) return;
+
+  currentOrder.splice(fromIdx, 1);
+  currentOrder.splice(toIdx, 0, draggedId);
+
+  state.siteOrder = currentOrder;
+  saveSiteOrder();
+  renderSiteFilters();
+  renderList();
 }
 
 function renderModeSwitch() {
@@ -293,10 +516,40 @@ function modeItems() {
   return state.mode === "all" ? effectiveAllItems() : state.itemsAi;
 }
 
+// Signal words that are really source/site identifiers rather than topics.
+const SIGNAL_CHIP_BLACKLIST = new Set([
+  "huggingface",
+  "hugging face",
+  "aihot",
+  "aibase",
+  "aihubtoday",
+  "zeli_24h_hot",
+  "reddit",
+  "arxiv",
+  "github",
+]);
+
+const SIGNAL_CHIP_LIMIT = 14;
+
+function itemSignals(item) {
+  const arr = item && item.ai_signals;
+  return Array.isArray(arr) ? arr : [];
+}
+
+function itemMatchesSignals(item) {
+  if (state.signalFilters.size === 0) return true;
+  const sigs = itemSignals(item);
+  for (const s of sigs) {
+    if (state.signalFilters.has(s)) return true;
+  }
+  return false;
+}
+
 function getFilteredItems() {
   const q = state.query.trim().toLowerCase();
   return modeItems().filter((item) => {
     if (state.siteFilters.size > 0 && !state.siteFilters.has(item.site_id)) return false;
+    if (!itemMatchesSignals(item)) return false;
     if (!q) return true;
     const hay = `${item.title || ""} ${item.title_zh || ""} ${item.title_en || ""} ${item.site_name || ""} ${item.source || ""}`.toLowerCase();
     return hay.includes(q);
@@ -309,8 +562,9 @@ function renderItemNode(item) {
   const titleEl = node.querySelector(".card-title");
   const zh = (item.title_zh || "").trim();
   const en = (item.title_en || "").trim();
+  const original = (item.title || "").trim();
   titleEl.textContent = "";
-  if (zh && en && zh !== en) {
+  if (state.bilingual && zh && en && zh !== en) {
     const primary = document.createElement("span");
     primary.textContent = zh;
     const sub = document.createElement("span");
@@ -318,8 +572,10 @@ function renderItemNode(item) {
     sub.textContent = en;
     titleEl.appendChild(primary);
     titleEl.appendChild(sub);
+  } else if (state.bilingual) {
+    titleEl.textContent = original || zh || en;
   } else {
-    titleEl.textContent = item.title || zh || en;
+    titleEl.textContent = original || en || zh;
   }
   titleEl.href = item.url;
 
@@ -336,6 +592,58 @@ function renderItemNode(item) {
 
 const BENTO_PREVIEW_COUNT = 3;
 
+// Aggregator sites whose items come from many different domains — pin a
+// canonical home so the bento title is still clickable.
+const SITE_HOME_OVERRIDES = {
+  hn_ai: "https://news.ycombinator.com/",
+  aihot: "https://aihot.virxact.com/",
+  reddit_ai: "https://www.reddit.com/r/MachineLearning/",
+  github_topics: "https://github.com/topics",
+  github_trending: "https://github.com/trending",
+  hf_papers: "https://huggingface.co/papers",
+  hf_spaces: "https://huggingface.co/spaces",
+};
+
+function resolveSiteHome(siteId, items) {
+  return SITE_HOME_OVERRIDES[siteId] || inferSiteHome(items);
+}
+
+function inferSiteHome(items) {
+  const urls = items.map((it) => it.url).filter(Boolean);
+  if (!urls.length) return null;
+  try {
+    const parsed = urls.map((u) => new URL(u));
+    const origin = parsed[0].origin;
+    if (!parsed.every((p) => p.origin === origin)) return null;
+    const segs = parsed.map((p) => p.pathname.split("/").filter(Boolean));
+    const first = segs[0] || [];
+    const prefix = [];
+    for (let i = 0; i < first.length; i++) {
+      if (segs.every((s) => s[i] === first[i])) prefix.push(first[i]);
+      else break;
+    }
+    return origin + (prefix.length ? "/" + prefix.join("/") : "");
+  } catch {
+    return null;
+  }
+}
+
+function buildTitleNode(siteName, homeUrl) {
+  const title = document.createElement("h3");
+  if (homeUrl) {
+    const link = document.createElement("a");
+    link.href = homeUrl;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    link.textContent = siteName;
+    link.title = `打开 ${siteName}`;
+    title.appendChild(link);
+  } else {
+    title.textContent = siteName;
+  }
+  return title;
+}
+
 function buildBentoBox(siteId, siteName, items) {
   const box = document.createElement("section");
   box.className = "bento-box";
@@ -344,12 +652,24 @@ function buildBentoBox(siteId, siteName, items) {
   // Header
   const head = document.createElement("header");
   head.className = "bento-box-head";
-  const title = document.createElement("h3");
-  title.textContent = siteName;
+  const title = buildTitleNode(siteName, resolveSiteHome(siteId, items));
+
+  const actions = document.createElement("div");
+  actions.className = "bento-box-actions";
   const count = document.createElement("span");
   count.className = "bento-box-count";
   count.textContent = `${fmtNumber(items.length)} 条`;
-  head.append(title, count);
+  const closeBtn = document.createElement("button");
+  closeBtn.className = "bento-box-close";
+  closeBtn.textContent = "×";
+  closeBtn.title = `隐藏 ${siteName}`;
+  closeBtn.setAttribute("aria-label", `隐藏 ${siteName}`);
+  closeBtn.onclick = (e) => {
+    e.stopPropagation();
+    hideSite(siteId);
+  };
+  actions.append(count, closeBtn);
+  head.append(title, actions);
   box.appendChild(head);
 
   // Body with items
@@ -361,16 +681,27 @@ function buildBentoBox(siteId, siteName, items) {
   previewItems.forEach((item) => body.appendChild(renderItemNode(item)));
   box.appendChild(body);
 
-  // Expand button if more items
+  // Expand / collapse toggle
   if (remainingItems.length > 0) {
-    const moreBtn = document.createElement("button");
-    moreBtn.className = "bento-box-more";
-    moreBtn.textContent = `展开剩余 ${fmtNumber(remainingItems.length)} 条`;
-    moreBtn.onclick = () => {
-      remainingItems.forEach((item) => body.appendChild(renderItemNode(item)));
-      moreBtn.remove();
+    const toggleBtn = document.createElement("button");
+    toggleBtn.className = "bento-box-more";
+    toggleBtn.textContent = `展开剩余 ${fmtNumber(remainingItems.length)} 条`;
+    let expanded = false;
+    toggleBtn.onclick = () => {
+      if (!expanded) {
+        remainingItems.forEach((item) => body.appendChild(renderItemNode(item)));
+        toggleBtn.textContent = "收起";
+        expanded = true;
+      } else {
+        remainingItems.forEach(() => {
+          if (body.children.length > BENTO_PREVIEW_COUNT) body.lastChild.remove();
+        });
+        toggleBtn.textContent = `展开剩余 ${fmtNumber(remainingItems.length)} 条`;
+        expanded = false;
+        box.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }
     };
-    box.appendChild(moreBtn);
+    box.appendChild(toggleBtn);
   }
 
   return box;
@@ -380,13 +711,11 @@ function buildWaytoagiBento() {
   const box = document.createElement("section");
   box.className = "bento-box bento-waytoagi";
 
-  // Head with inline controls
+  // Head — consistent height with other bento boxes
   const head = document.createElement("header");
   head.className = "bento-box-head";
-  const headInner = document.createElement("div");
-  headInner.className = "bento-waytoagi-head";
-  const title = document.createElement("h3");
-  title.textContent = "WaytoAGI";
+  const waytoagiHome = state.waytoagiData?.root_url || "https://waytoagi.com";
+  const title = buildTitleNode("WaytoAGI", waytoagiHome);
   const tools = document.createElement("div");
   tools.className = "bento-waytoagi-tools";
   const sw = document.createElement("div");
@@ -401,8 +730,15 @@ function buildWaytoagiBento() {
   weekBtn.id = "waytoagi7dBtn";
   sw.append(todayBtn, weekBtn);
   tools.appendChild(sw);
-  headInner.append(title, tools);
-  head.appendChild(headInner);
+  const closeBtn = document.createElement("button");
+  closeBtn.className = "bento-box-close";
+  closeBtn.textContent = "×";
+  closeBtn.title = "隐藏 WaytoAGI";
+  closeBtn.onclick = (e) => {
+    e.stopPropagation();
+    hideSite("__waytoagi__");
+  };
+  head.append(title, tools, closeBtn);
   box.appendChild(head);
 
   // Meta area
@@ -466,9 +802,75 @@ function setupNavObserver() {
   document.querySelectorAll(".bento-box[id^='bento-']").forEach((box) => observer.observe(box));
 }
 
+function renderSignalChips() {
+  const bar = document.getElementById("signalChipsBar");
+  const chipsEl = document.getElementById("signalChips");
+  const clearBtn = document.getElementById("signalChipsClear");
+  if (!bar || !chipsEl) return;
+
+  // Topic chips are derived from ai_signals, which only exist on AI-mode items.
+  if (state.mode !== "ai") {
+    bar.hidden = true;
+    chipsEl.innerHTML = "";
+    if (state.signalFilters.size) state.signalFilters.clear();
+    return;
+  }
+
+  // Apply every filter except signals to scope chip counts to the current view.
+  const q = state.query.trim().toLowerCase();
+  const scoped = modeItems().filter((item) => {
+    if (state.siteFilters.size > 0 && !state.siteFilters.has(item.site_id)) return false;
+    if (!q) return true;
+    const hay = `${item.title || ""} ${item.title_zh || ""} ${item.title_en || ""} ${item.site_name || ""} ${item.source || ""}`.toLowerCase();
+    return hay.includes(q);
+  });
+
+  const freq = new Map();
+  for (const it of scoped) {
+    for (const s of itemSignals(it)) {
+      if (!s || SIGNAL_CHIP_BLACKLIST.has(s)) continue;
+      freq.set(s, (freq.get(s) || 0) + 1);
+    }
+  }
+
+  // Always show currently-selected chips even if their fresh count is below the cut-off.
+  const ranked = Array.from(freq.entries()).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  const top = ranked.slice(0, SIGNAL_CHIP_LIMIT);
+  const topNames = new Set(top.map(([s]) => s));
+  for (const s of state.signalFilters) {
+    if (!topNames.has(s)) top.push([s, freq.get(s) || 0]);
+  }
+
+  if (!top.length) {
+    bar.hidden = true;
+    chipsEl.innerHTML = "";
+    return;
+  }
+  bar.hidden = false;
+  chipsEl.innerHTML = "";
+
+  for (const [name, count] of top) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = `signal-chip${state.signalFilters.has(name) ? " active" : ""}`;
+    btn.dataset.signal = name;
+    btn.title = `${name} · ${count} 条`;
+    btn.innerHTML = `${name}<span class="signal-chip-count">${count}</span>`;
+    btn.onclick = () => {
+      if (state.signalFilters.has(name)) state.signalFilters.delete(name);
+      else state.signalFilters.add(name);
+      renderList();
+    };
+    chipsEl.appendChild(btn);
+  }
+
+  if (clearBtn) clearBtn.hidden = state.signalFilters.size === 0;
+}
+
 function renderList() {
   const filtered = getFilteredItems();
   resultCountEl.textContent = `${fmtNumber(filtered.length)} 条`;
+  renderSignalChips();
 
   newsListEl.innerHTML = "";
 
@@ -490,15 +892,17 @@ function renderList() {
     siteMap.get(item.site_id).items.push(item);
   });
 
-  const siteGroups = Array.from(siteMap.entries())
-    .sort((a, b) => b[1].items.length - a[1].items.length || a[1].siteName.localeCompare(b[1].siteName, "zh-CN"))
-    .map(([id, data]) => [id, data.siteName, data.items]);
+  const siteGroups = orderSiteGroups(
+    Array.from(siteMap.entries())
+      .filter(([id]) => !state.hiddenSites.has(id))
+      .map(([id, data]) => [id, data.siteName, data.items])
+  );
 
   // Render nav
   renderSiteNav(siteGroups);
 
-  // Render WaytoAGI bento if data exists
-  if (state.waytoagiData) {
+  // Render WaytoAGI bento if data exists and visible
+  if (state.waytoagiData && state.waytoagiVisible) {
     newsListEl.appendChild(buildWaytoagiBento());
     // Re-render WaytoAGI content into the new DOM elements
     const metaEl = document.getElementById("waytoagiMeta");
@@ -760,6 +1164,7 @@ async function init() {
     renderModeSwitch();
     renderCoverageStrip();
     loadSiteFiltersFromHash();
+    loadSiteOrder();
     renderSiteFilters();
     renderList();
     updatedAtEl.textContent = `更新时间：${fmtTime(state.generatedAt)}`;
@@ -822,6 +1227,23 @@ if (allDedupeToggleEl) {
     state.allDedup = Boolean(e.target.checked);
     renderModeSwitch();
     renderSiteFilters();
+    renderList();
+  });
+}
+
+if (translateToggleEl) {
+  translateToggleEl.checked = state.bilingual;
+  translateToggleEl.addEventListener("change", (e) => {
+    state.bilingual = Boolean(e.target.checked);
+    try { localStorage.setItem("ainr-bilingual", state.bilingual ? "1" : "0"); } catch (_) {}
+    renderList();
+  });
+}
+
+const signalChipsClearEl = document.getElementById("signalChipsClear");
+if (signalChipsClearEl) {
+  signalChipsClearEl.addEventListener("click", () => {
+    state.signalFilters.clear();
     renderList();
   });
 }

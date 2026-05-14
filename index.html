@@ -31,6 +31,18 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="./assets/styles.css" />
+    <script>
+      (function () {
+        try {
+          var saved = localStorage.getItem("ainr-theme");
+          var prefersDark =
+            window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+          document.documentElement.dataset.theme = saved || (prefersDark ? "dark" : "light");
+        } catch (_) {
+          document.documentElement.dataset.theme = "light";
+        }
+      })();
+    </script>
   </head>
   <body>
     <main class="shell">
@@ -40,6 +52,9 @@
         <div class="hero-title-row">
           <h1>24 小时 AI 更新雷达</h1>
           <span class="updated" id="updatedAt">加载中...</span>
+          <span class="hero-actions">
+            <button id="themeToggle" class="theme-toggle" type="button" title="切换日间 / 夜间">DARK</button>
+          </span>
         </div>
         <p class="hero-sub">过去 24 小时值得看的 AI/科技更新 · 自动过滤 · 每 30 分钟刷新</p>
         <section class="stats" id="stats"></section>
@@ -59,8 +74,25 @@
             <span class="all-dedupe-dot"></span>
             <span id="allDedupeLabel">去重开</span>
           </label>
+          <label class="all-dedupe" title="开=中英双语 / 关=仅原标题">
+            <input id="translateToggle" type="checkbox" checked />
+            <span class="all-dedupe-dot"></span>
+            <span>双语</span>
+          </label>
         </div>
         <section class="coverage-strip" id="coverageStrip" aria-label="Source coverage status"></section>
+      </section>
+
+      <!-- Site Filter Pills -->
+      <section class="site-pills-bar" id="sitePillsBar">
+        <div class="site-pills" id="sitePills"></div>
+      </section>
+
+      <!-- Signal-word chips -->
+      <section class="signal-chips-bar" id="signalChipsBar" hidden>
+        <span class="signal-chips-label">主题</span>
+        <div class="signal-chips" id="signalChips"></div>
+        <button id="signalChipsClear" class="signal-clear" type="button" hidden>清空</button>
       </section>
 
       <!-- Advanced Panel -->
@@ -70,12 +102,15 @@
           <span class="advanced-summary" id="advancedSummary">加载中...</span>
         </summary>
         <div class="advanced-content">
-          <section class="site-pills" id="sitePills"></section>
           <div class="source-health" id="sourceHealth"></div>
         </div>
       </details>
 
       <!-- Main Content: left nav + bento grid -->
+      <div class="layout-head">
+        <h2 id="listTitle">AI 信号流</h2>
+        <span id="resultCount" class="result-count">0 条</span>
+      </div>
       <div class="layout-main">
         <nav class="site-nav" id="siteNav" aria-label="站点导航"></nav>
         <div class="bento-grid" id="newsList"></div>
