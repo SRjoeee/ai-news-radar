@@ -70,45 +70,15 @@
           <span class="advanced-summary" id="advancedSummary">加载中...</span>
         </summary>
         <div class="advanced-content">
-          <div class="advanced-controls">
-            <label class="field">
-              <span>站点</span>
-              <select id="siteSelect" aria-label="选择站点">
-                <option value="">全部站点</option>
-              </select>
-            </label>
-          </div>
           <section class="site-pills" id="sitePills"></section>
           <div class="source-health" id="sourceHealth"></div>
         </div>
       </details>
 
-      <!-- Main Content: 2-column layout -->
-      <div class="content-grid">
-        <!-- News Feed (main) -->
-        <section class="feed">
-          <div class="feed-head">
-            <h2 id="listTitle">AI 信号流</h2>
-            <span id="resultCount" class="result-count">0 条</span>
-          </div>
-          <div id="newsList" class="news-list"></div>
-        </section>
-
-        <!-- WaytoAGI Sidebar -->
-        <aside class="sidebar">
-          <div class="sidebar-head">
-            <h2>WaytoAGI</h2>
-            <div class="sidebar-tools">
-              <div class="sidebar-switch" role="tablist">
-                <button id="waytoagiTodayBtn" class="sidebar-btn active" type="button" role="tab" aria-selected="true">今日</button>
-                <button id="waytoagi7dBtn" class="sidebar-btn" type="button" role="tab" aria-selected="false">7日</button>
-              </div>
-              <span id="waytoagiUpdatedAt" class="sidebar-updated">加载中...</span>
-            </div>
-          </div>
-          <div id="waytoagiMeta" class="waytoagi-meta"></div>
-          <div id="waytoagiList" class="waytoagi-list"></div>
-        </aside>
+      <!-- Main Content: left nav + bento grid -->
+      <div class="layout-main">
+        <nav class="site-nav" id="siteNav" aria-label="站点导航"></nav>
+        <div class="bento-grid" id="newsList"></div>
       </div>
     </main>
 

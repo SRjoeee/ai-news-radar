@@ -10,7 +10,7 @@ const state = {
   allDataLoaded: false,
   allDataUrl: "data/latest-24h-all.json",
   allDataPromise: null,
-  siteFilter: "",
+  siteFilters: new Set(),
   query: "",
   mode: "ai",
   waytoagiMode: "today",
@@ -20,7 +20,6 @@ const state = {
 };
 
 const statsEl = document.getElementById("stats");
-const siteSelectEl = document.getElementById("siteSelect");
 const sitePillsEl = document.getElementById("sitePills");
 const newsListEl = document.getElementById("newsList");
 const updatedAtEl = document.getElementById("updatedAt");
@@ -36,12 +35,6 @@ const allDedupeToggleEl = document.getElementById("allDedupeToggle");
 const allDedupeLabelEl = document.getElementById("allDedupeLabel");
 const advancedSummaryEl = document.getElementById("advancedSummary");
 const sourceHealthEl = document.getElementById("sourceHealth");
-
-const waytoagiUpdatedAtEl = document.getElementById("waytoagiUpdatedAt");
-const waytoagiMetaEl = document.getElementById("waytoagiMeta");
-const waytoagiListEl = document.getElementById("waytoagiList");
-const waytoagiTodayBtnEl = document.getElementById("waytoagiTodayBtn");
-const waytoagi7dBtnEl = document.getElementById("waytoagi7dBtn");
 const coverageStripEl = document.getElementById("coverageStrip");
 
 const SOURCE_KINDS = {
@@ -208,42 +201,69 @@ function currentSiteStats() {
   return computeSiteStats(state.allDedup ? (state.itemsAll || []) : (state.itemsAllRaw || []));
 }
 
+function saveSiteFiltersToHash() {
+  const hash = state.siteFilters.size > 0 ? `sites=${Array.from(state.siteFilters).join(",")}` : "";
+  history.replaceState(null, "", hash ? `#${hash}` : location.pathname);
+}
+
+function loadSiteFiltersFromHash() {
+  const match = location.hash.match(/sites=([^&]+)/);
+  if (match) {
+    match[1].split(",").forEach((id) => { if (id) state.siteFilters.add(id); });
+  }
+}
+
 function renderSiteFilters() {
   const stats = currentSiteStats();
-
-  siteSelectEl.innerHTML = '<option value="">全部站点</option>';
-  stats.forEach((s) => {
-    const opt = document.createElement("option");
-    opt.value = s.site_id;
-    const raw = s.raw_count ?? s.count;
-    opt.textContent = `${s.site_name} (${s.count}/${raw})`;
-    siteSelectEl.appendChild(opt);
-  });
-  siteSelectEl.value = state.siteFilter;
+  const hasFilter = state.siteFilters.size > 0;
 
   sitePillsEl.innerHTML = "";
-  const allPill = document.createElement("button");
-  allPill.className = `pill ${state.siteFilter === "" ? "active" : ""}`;
-  allPill.textContent = "全部";
-  allPill.onclick = () => {
-    state.siteFilter = "";
+
+  // "All" button — clears filter
+  const allBtn = document.createElement("button");
+  allBtn.className = `pill ${!hasFilter ? "active" : ""}`;
+  allBtn.textContent = "全部";
+  allBtn.onclick = () => {
+    state.siteFilters.clear();
     renderSiteFilters();
     renderList();
   };
-  sitePillsEl.appendChild(allPill);
+  sitePillsEl.appendChild(allBtn);
 
+  // "None" button — selects all sites (explicit multi-select)
+  const noneBtn = document.createElement("button");
+  noneBtn.className = `pill ${hasFilter && state.siteFilters.size === stats.length ? "active" : ""}`;
+  noneBtn.textContent = "全不选";
+  noneBtn.onclick = () => {
+    stats.forEach((s) => state.siteFilters.add(s.site_id));
+    renderSiteFilters();
+    renderList();
+  };
+  sitePillsEl.appendChild(noneBtn);
+
+  // Per-site pills
   stats.forEach((s) => {
     const btn = document.createElement("button");
-    btn.className = `pill ${state.siteFilter === s.site_id ? "active" : ""}`;
-    const raw = s.raw_count ?? s.count;
-    btn.textContent = `${s.site_name} ${s.count}/${raw}`;
+    const active = hasFilter ? state.siteFilters.has(s.site_id) : true;
+    btn.className = `pill ${active ? "active" : ""}`;
+    btn.textContent = `${s.site_name} ${s.count}`;
     btn.onclick = () => {
-      state.siteFilter = s.site_id;
+      if (!hasFilter) {
+        // No filter yet → clicking a site selects ONLY that site
+        state.siteFilters.clear();
+        state.siteFilters.add(s.site_id);
+      } else if (state.siteFilters.has(s.site_id)) {
+        state.siteFilters.delete(s.site_id);
+      } else {
+        state.siteFilters.add(s.site_id);
+      }
       renderSiteFilters();
       renderList();
     };
     sitePillsEl.appendChild(btn);
   });
+
+  saveSiteFiltersToHash();
 }
 
 function renderModeSwitch() {
@@ -276,7 +296,7 @@ function modeItems() {
 function getFilteredItems() {
   const q = state.query.trim().toLowerCase();
   return modeItems().filter((item) => {
-    if (state.siteFilter && item.site_id !== state.siteFilter) return false;
+    if (state.siteFilters.size > 0 && !state.siteFilters.has(item.site_id)) return false;
     if (!q) return true;
     const hay = `${item.title || ""} ${item.title_zh || ""} ${item.title_en || ""} ${item.site_name || ""} ${item.source || ""}`.toLowerCase();
     return hay.includes(q);
@@ -314,88 +334,136 @@ function renderItemNode(item) {
   return node;
 }
 
-function buildSourceGroupNode(source, items) {
-  const section = document.createElement("section");
-  section.className = "source-group";
-  const header = document.createElement("header");
-  header.className = "source-group-head";
+const BENTO_PREVIEW_COUNT = 3;
+
+function buildBentoBox(siteId, siteName, items) {
+  const box = document.createElement("section");
+  box.className = "bento-box";
+  box.id = `bento-${siteId}`;
+
+  // Header
+  const head = document.createElement("header");
+  head.className = "bento-box-head";
   const title = document.createElement("h3");
-  title.textContent = source;
+  title.textContent = siteName;
   const count = document.createElement("span");
+  count.className = "bento-box-count";
   count.textContent = `${fmtNumber(items.length)} 条`;
-  const listEl = document.createElement("div");
-  listEl.className = "source-group-list";
-  header.append(title, count);
-  section.append(header, listEl);
-  items.forEach((item) => listEl.appendChild(renderItemNode(item)));
-  return section;
+  head.append(title, count);
+  box.appendChild(head);
+
+  // Body with items
+  const body = document.createElement("div");
+  body.className = "bento-box-body";
+  const previewItems = items.slice(0, BENTO_PREVIEW_COUNT);
+  const remainingItems = items.slice(BENTO_PREVIEW_COUNT);
+
+  previewItems.forEach((item) => body.appendChild(renderItemNode(item)));
+  box.appendChild(body);
+
+  // Expand button if more items
+  if (remainingItems.length > 0) {
+    const moreBtn = document.createElement("button");
+    moreBtn.className = "bento-box-more";
+    moreBtn.textContent = `展开剩余 ${fmtNumber(remainingItems.length)} 条`;
+    moreBtn.onclick = () => {
+      remainingItems.forEach((item) => body.appendChild(renderItemNode(item)));
+      moreBtn.remove();
+    };
+    box.appendChild(moreBtn);
+  }
+
+  return box;
 }
 
-function groupBySource(items) {
-  const groupMap = new Map();
-  items.forEach((item) => {
-    const key = item.source || "未分区";
-    if (!groupMap.has(key)) {
-      groupMap.set(key, []);
-    }
-    groupMap.get(key).push(item);
+function buildWaytoagiBento() {
+  const box = document.createElement("section");
+  box.className = "bento-box bento-waytoagi";
+
+  // Head with inline controls
+  const head = document.createElement("header");
+  head.className = "bento-box-head";
+  const headInner = document.createElement("div");
+  headInner.className = "bento-waytoagi-head";
+  const title = document.createElement("h3");
+  title.textContent = "WaytoAGI";
+  const tools = document.createElement("div");
+  tools.className = "bento-waytoagi-tools";
+  const sw = document.createElement("div");
+  sw.className = "bento-waytoagi-switch";
+  const todayBtn = document.createElement("button");
+  todayBtn.className = "bento-waytoagi-btn active";
+  todayBtn.textContent = "今日";
+  todayBtn.id = "waytoagiTodayBtn";
+  const weekBtn = document.createElement("button");
+  weekBtn.className = "bento-waytoagi-btn";
+  weekBtn.textContent = "7日";
+  weekBtn.id = "waytoagi7dBtn";
+  sw.append(todayBtn, weekBtn);
+  tools.appendChild(sw);
+  headInner.append(title, tools);
+  head.appendChild(headInner);
+  box.appendChild(head);
+
+  // Meta area
+  const meta = document.createElement("div");
+  meta.className = "waytoagi-meta";
+  meta.id = "waytoagiMeta";
+  box.appendChild(meta);
+
+  // List area
+  const list = document.createElement("div");
+  list.className = "waytoagi-list";
+  list.id = "waytoagiList";
+  box.appendChild(list);
+
+  return box;
+}
+
+function renderSiteNav(siteGroups) {
+  const navEl = document.getElementById("siteNav");
+  if (!navEl) return;
+  navEl.innerHTML = "";
+
+  siteGroups.forEach(([siteId, siteName, items]) => {
+    const btn = document.createElement("button");
+    btn.className = "site-nav-item";
+    btn.dataset.siteId = siteId;
+
+    const dot = document.createElement("span");
+    dot.className = "site-nav-dot";
+    const name = document.createElement("span");
+    name.textContent = siteName;
+    const cnt = document.createElement("span");
+    cnt.className = "site-nav-count";
+    cnt.textContent = items.length;
+    btn.append(dot, name, cnt);
+
+    btn.onclick = () => {
+      const target = document.getElementById(`bento-${siteId}`);
+      if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
+    };
+    navEl.appendChild(btn);
   });
-
-  return Array.from(groupMap.entries()).sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0], "zh-CN"));
 }
 
-function renderGroupedBySource(items) {
-  const groups = groupBySource(items);
-  const frag = document.createDocumentFragment();
+function setupNavObserver() {
+  const navItems = document.querySelectorAll(".site-nav-item");
+  if (!navItems.length) return;
 
-  groups.forEach(([source, groupItems]) => {
-    frag.appendChild(buildSourceGroupNode(source, groupItems));
-  });
-
-  newsListEl.appendChild(frag);
-}
-
-function renderGroupedBySiteAndSource(items) {
-  const siteMap = new Map();
-  items.forEach((item) => {
-    if (!siteMap.has(item.site_id)) {
-      siteMap.set(item.site_id, {
-        siteName: item.site_name || item.site_id,
-        items: [],
+  const observer = new IntersectionObserver(
+    (entries) => {
+      entries.forEach((entry) => {
+        const navItem = document.querySelector(`.site-nav-item[data-site-id="${entry.target.id.replace("bento-", "")}"]`);
+        if (navItem) {
+          navItem.classList.toggle("active", entry.isIntersecting && entry.intersectionRatio > 0);
+        }
       });
-    }
-    siteMap.get(item.site_id).items.push(item);
-  });
+    },
+    { rootMargin: "-80px 0px -60% 0px", threshold: 0 }
+  );
 
-  const sites = Array.from(siteMap.entries()).sort((a, b) => {
-    const byCount = b[1].items.length - a[1].items.length;
-    if (byCount !== 0) return byCount;
-    return a[1].siteName.localeCompare(b[1].siteName, "zh-CN");
-  });
-
-  const frag = document.createDocumentFragment();
-  sites.forEach(([, site]) => {
-    const siteSection = document.createElement("section");
-    siteSection.className = "site-group";
-    const header = document.createElement("header");
-    header.className = "site-group-head";
-    const title = document.createElement("h3");
-    title.textContent = site.siteName;
-    const count = document.createElement("span");
-    count.textContent = `${fmtNumber(site.items.length)} 条`;
-    const siteListEl = document.createElement("div");
-    siteListEl.className = "site-group-list";
-    header.append(title, count);
-    siteSection.append(header, siteListEl);
-
-    const sourceGroups = groupBySource(site.items);
-    sourceGroups.forEach(([source, groupItems]) => {
-      siteListEl.appendChild(buildSourceGroupNode(source, groupItems));
-    });
-    frag.appendChild(siteSection);
-  });
-
-  newsListEl.appendChild(frag);
+  document.querySelectorAll(".bento-box[id^='bento-']").forEach((box) => observer.observe(box));
 }
 
 function renderList() {
@@ -409,15 +477,49 @@ function renderList() {
     empty.className = "empty";
     empty.textContent = "当前筛选条件下没有结果。";
     newsListEl.appendChild(empty);
+    renderSiteNav([]);
     return;
   }
 
-  if (state.siteFilter) {
-    renderGroupedBySource(filtered);
-    return;
+  // Group items by site
+  const siteMap = new Map();
+  filtered.forEach((item) => {
+    if (!siteMap.has(item.site_id)) {
+      siteMap.set(item.site_id, { siteName: item.site_name || item.site_id, items: [] });
+    }
+    siteMap.get(item.site_id).items.push(item);
+  });
+
+  const siteGroups = Array.from(siteMap.entries())
+    .sort((a, b) => b[1].items.length - a[1].items.length || a[1].siteName.localeCompare(b[1].siteName, "zh-CN"))
+    .map(([id, data]) => [id, data.siteName, data.items]);
+
+  // Render nav
+  renderSiteNav(siteGroups);
+
+  // Render WaytoAGI bento if data exists
+  if (state.waytoagiData) {
+    newsListEl.appendChild(buildWaytoagiBento());
+    // Re-render WaytoAGI content into the new DOM elements
+    const metaEl = document.getElementById("waytoagiMeta");
+    const listEl = document.getElementById("waytoagiList");
+    const todayBtnEl = document.getElementById("waytoagiTodayBtn");
+    const weekBtnEl = document.getElementById("waytoagi7dBtn");
+    // Store refs for renderWaytoagi
+    state._waytoagiMetaEl = metaEl;
+    state._waytoagiListEl = listEl;
+    state._waytoagiTodayBtnEl = todayBtnEl;
+    state._waytoagi7dBtnEl = weekBtnEl;
+    renderWaytoagi(state.waytoagiData);
   }
 
-  renderGroupedBySiteAndSource(filtered);
+  // Render bento boxes
+  siteGroups.forEach(([siteId, siteName, items]) => {
+    newsListEl.appendChild(buildBentoBox(siteId, siteName, items));
+  });
+
+  // Setup nav observer
+  requestAnimationFrame(setupNavObserver);
 }
 
 function waytoagiViews(waytoagi) {
@@ -431,41 +533,48 @@ function waytoagiViews(waytoagi) {
 
 function renderWaytoagi(waytoagi) {
   const { updates7d, updatesToday, latestDate } = waytoagiViews(waytoagi);
-  if (waytoagiTodayBtnEl) waytoagiTodayBtnEl.classList.toggle("active", state.waytoagiMode === "today");
-  if (waytoagi7dBtnEl) waytoagi7dBtnEl.classList.toggle("active", state.waytoagiMode === "7d");
-  waytoagiUpdatedAtEl.textContent = `更新时间：${fmtTime(waytoagi.generated_at)}`;
+  const metaEl = state._waytoagiMetaEl || waytoagiMetaEl;
+  const listEl = state._waytoagiListEl || waytoagiListEl;
+  const todayBtn = state._waytoagiTodayBtnEl;
+  const weekBtn = state._waytoagi7dBtnEl;
 
-  waytoagiMetaEl.innerHTML = "";
-  const rootLink = document.createElement("a");
-  rootLink.href = waytoagi.root_url || "#";
-  rootLink.target = "_blank";
-  rootLink.rel = "noopener noreferrer";
-  rootLink.textContent = "主页面";
-  const historyLink = document.createElement("a");
-  historyLink.href = waytoagi.history_url || "#";
-  historyLink.target = "_blank";
-  historyLink.rel = "noopener noreferrer";
-  historyLink.textContent = "历史更新页";
-  const todayCount = document.createElement("span");
-  todayCount.textContent = `最近更新日(${latestDate || "--"})：${fmtNumber(waytoagi.count_today || updatesToday.length)} 条`;
-  const weekCount = document.createElement("span");
-  weekCount.textContent = `近 7 日：${fmtNumber(waytoagi.count_7d || updates7d.length)} 条`;
-  [rootLink, "·", historyLink, "·", todayCount, "·", weekCount].forEach((part) => {
-    if (typeof part === "string") {
-      const sep = document.createElement("span");
-      sep.textContent = part;
-      waytoagiMetaEl.appendChild(sep);
-    } else {
-      waytoagiMetaEl.appendChild(part);
-    }
-  });
+  if (todayBtn) todayBtn.classList.toggle("active", state.waytoagiMode === "today");
+  if (weekBtn) weekBtn.classList.toggle("active", state.waytoagiMode === "7d");
 
-  waytoagiListEl.innerHTML = "";
+  if (metaEl) {
+    metaEl.innerHTML = "";
+    const rootLink = document.createElement("a");
+    rootLink.href = waytoagi.root_url || "#";
+    rootLink.target = "_blank";
+    rootLink.rel = "noopener noreferrer";
+    rootLink.textContent = "主页面";
+    const historyLink = document.createElement("a");
+    historyLink.href = waytoagi.history_url || "#";
+    historyLink.target = "_blank";
+    historyLink.rel = "noopener noreferrer";
+    historyLink.textContent = "历史更新页";
+    const todayCount = document.createElement("span");
+    todayCount.textContent = `今日 ${fmtNumber(waytoagi.count_today || updatesToday.length)} 条`;
+    const weekCount = document.createElement("span");
+    weekCount.textContent = `7日 ${fmtNumber(waytoagi.count_7d || updates7d.length)} 条`;
+    [rootLink, "·", historyLink, "·", todayCount, "·", weekCount].forEach((part) => {
+      if (typeof part === "string") {
+        const sep = document.createElement("span");
+        sep.textContent = part;
+        metaEl.appendChild(sep);
+      } else {
+        metaEl.appendChild(part);
+      }
+    });
+  }
+
+  if (!listEl) return;
+  listEl.innerHTML = "";
   if (waytoagi.has_error) {
     const div = document.createElement("div");
     div.className = "waytoagi-error";
     div.textContent = waytoagi.error || "WaytoAGI 数据加载失败";
-    waytoagiListEl.appendChild(div);
+    listEl.appendChild(div);
     return;
   }
 
@@ -476,7 +585,7 @@ function renderWaytoagi(waytoagi) {
     div.textContent = state.waytoagiMode === "today"
       ? "最近更新日没有更新，可切换到近7日查看。"
       : (waytoagi.warning || "近 7 日没有更新");
-    waytoagiListEl.appendChild(div);
+    listEl.appendChild(div);
     return;
   }
 
@@ -493,7 +602,7 @@ function renderWaytoagi(waytoagi) {
     titleEl.className = "t";
     titleEl.textContent = u.title;
     row.append(dateEl, titleEl);
-    waytoagiListEl.appendChild(row);
+    listEl.appendChild(row);
   });
 }
 
@@ -650,6 +759,7 @@ async function init() {
     setStats(payload);
     renderModeSwitch();
     renderCoverageStrip();
+    loadSiteFiltersFromHash();
     renderSiteFilters();
     renderList();
     updatedAtEl.textContent = `更新时间：${fmtTime(state.generatedAt)}`;
@@ -670,21 +780,12 @@ async function init() {
 
   if (waytoagiResult.status === "fulfilled") {
     state.waytoagiData = waytoagiResult.value;
-    renderWaytoagi(state.waytoagiData);
-  } else {
-    waytoagiUpdatedAtEl.textContent = "加载失败";
-    waytoagiListEl.innerHTML = `<div class="waytoagi-error">${waytoagiResult.reason.message}</div>`;
+    // WaytoAGI will be rendered inside renderList() as a bento module
   }
 }
 
 searchInputEl.addEventListener("input", (e) => {
   state.query = e.target.value;
-  renderList();
-});
-
-siteSelectEl.addEventListener("change", (e) => {
-  state.siteFilter = e.target.value;
-  renderSiteFilters();
   renderList();
 });
 
@@ -725,18 +826,12 @@ if (allDedupeToggleEl) {
   });
 }
 
-if (waytoagiTodayBtnEl) {
-  waytoagiTodayBtnEl.addEventListener("click", () => {
-    state.waytoagiMode = "today";
-    if (state.waytoagiData) renderWaytoagi(state.waytoagiData);
-  });
-}
-
-if (waytoagi7dBtnEl) {
-  waytoagi7dBtnEl.addEventListener("click", () => {
-    state.waytoagiMode = "7d";
-    if (state.waytoagiData) renderWaytoagi(state.waytoagiData);
-  });
-}
+// WaytoAGI button delegation (buttons are created dynamically in bento modules)
+document.addEventListener("click", (e) => {
+  const btn = e.target.closest("#waytoagiTodayBtn, #waytoagi7dBtn");
+  if (!btn) return;
+  state.waytoagiMode = btn.id === "waytoagiTodayBtn" ? "today" : "7d";
+  if (state.waytoagiData) renderWaytoagi(state.waytoagiData);
+});
 
 init();
